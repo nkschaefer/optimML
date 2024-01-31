@@ -68,9 +68,10 @@ using namespace std;
 // ----- Solve for maximum likelihood of multivariate equation with -----
 // ----- known 1st and second derivatives                           -----
 
-multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
-    multivar_func ll, multivar_func_d dll, multivar_func_d2 dll2){
+void multivar_ml_solver::init(vector<double> params_init, multivar_func ll,
+    multivar_func_d dll, multivar_func_d2 dll2){
     
+    initialized = true;
     srand(time(NULL));
      
     ll_x = ll;
@@ -122,9 +123,23 @@ multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
 
 }
 
+
+multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
+    multivar_func ll, multivar_func_d dll, multivar_func_d2 dll2){
+    init(params_init, ll, dll, dll2);  
+}
+
+multivar_ml_solver::multivar_ml_solver(){
+    initialized = false;
+}
+
 void multivar_ml_solver::add_prior(int idx, multivar_prior_func ll,
     multivar_prior_func dll, multivar_prior_func dll2){
     
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     this->has_prior[idx] = true;
     this->ll_x_prior[idx] = &ll;
     this->dll_dx_prior[idx] = &dll;
@@ -133,16 +148,28 @@ void multivar_ml_solver::add_prior(int idx, multivar_prior_func ll,
 }
 
 bool multivar_ml_solver::add_prior_param(int idx, string name, double data){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     this->params_prior_double[idx].insert(make_pair(name, data));
     return true;
 }
 
 bool multivar_ml_solver::add_prior_param(int idx, string name, int data){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     this->params_prior_int[idx].insert(make_pair(name, data));
     return true;
 }
 
 bool multivar_ml_solver::add_param(string name, std::vector<double>& dat){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     // Make sure dimensions agree
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
@@ -158,6 +185,10 @@ bool multivar_ml_solver::add_param(string name, std::vector<double>& dat){
 }
 
 bool multivar_ml_solver::add_param(string name, std::vector<int>& dat){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     // Make sure dimensions agree
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
@@ -187,6 +218,10 @@ bool multivar_ml_solver::add_param(string name, std::vector<int>& dat){
  * entry in x. 
  */
 bool multivar_ml_solver::add_mixcomp(vector<vector<double> >& dat){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     // Make sure dimensions agree.
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
@@ -225,6 +260,10 @@ bool multivar_ml_solver::add_mixcomp(vector<vector<double> >& dat){
 }
 
 bool multivar_ml_solver::add_mixcomp_fracs(vector<double>& fracs){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     if (fracs.size() != nmixcomp){
         fprintf(stderr, "ERROR: number of mixture props does not match stored data\n");
         return false;
@@ -240,7 +279,10 @@ bool multivar_ml_solver::add_mixcomp_fracs(vector<double>& fracs){
 }
 
 void multivar_ml_solver::randomize_mixcomps(){
-
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     // Randomly re-sample starting mixture proportions. Equivalent to sampling from
     // a Dirichlet distribution with all alpha_i = 1
     double sum = 0.0;
@@ -255,6 +297,10 @@ void multivar_ml_solver::randomize_mixcomps(){
 }
 
 bool multivar_ml_solver::set_param(int idx, double val){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     if (idx >= n_param-nmixcomp){
         fprintf(stderr, "ERROR: illegal parameter index\n");
         return false;
@@ -280,6 +326,10 @@ bool multivar_ml_solver::set_param(int idx, double val){
 }
 
 void multivar_ml_solver::constrain_pos(int idx){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     // Un-transform if necessary
     if (this->trans_log[idx]){
         return;
@@ -297,7 +347,10 @@ void multivar_ml_solver::constrain_pos(int idx){
 }
 
 void multivar_ml_solver::constrain_01(int idx){
-    
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     // Un-transform if necessary
     if (this->trans_logit[idx]){
         return;
@@ -315,10 +368,18 @@ void multivar_ml_solver::constrain_01(int idx){
 }
 
 void multivar_ml_solver::set_delta(double d){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     this->delta_thresh = d;
 }
 
 void multivar_ml_solver::set_maxiter(int m){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
     this->maxiter = m;
 }
 
@@ -1025,7 +1086,10 @@ bool multivar_ml_solver::backtrack(vector<double>& delta_vec,
 }
 
 bool multivar_ml_solver::solve(){
-    
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        return false;
+    }
     if (params_double_vals.size() == 0 && params_int_vals.size() == 0){
         fprintf(stderr, "ERROR: not initialized with data\n");
         return false;
@@ -1088,14 +1152,10 @@ bool multivar_ml_solver::solve(){
     double llprev = 0.0;
     vector<double> delta_vec;
     
-    vector<double> G_prev;
-    
     bool mirrored_prev = false;
 
     while (delta > delta_thresh && (maxiter == -1 || nits < maxiter)){
         
-        G_prev = G;
-
         // Compute everything    
         double loglik = eval_funcs();
         //fprintf(stderr, "LL %f -> %f\n", llprev, loglik);
@@ -1112,7 +1172,6 @@ bool multivar_ml_solver::solve(){
         // Check whether to terminate
         if (nits != 0){
             delta = loglik - llprev;
-            
             if (mirrored_prev){
                 // Don't let it converge until we're back to seeking a 
                 // maximum
@@ -1189,6 +1248,7 @@ bool multivar_ml_solver::solve(){
         // Did not converge.
         return false;
     }
+    fprintf(stderr, "%d of %d iterations\n", nits, maxiter);
     return true;
 }
 

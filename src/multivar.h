@@ -61,6 +61,9 @@ typedef std::function< double( double,
 class multivar_ml_solver{
     private: 
         
+        // Have we set everything up?
+        bool initialized;
+
         // How many variables in x?
         int n_param;
                 
@@ -217,9 +220,14 @@ class multivar_ml_solver{
         // Hessian
         std::vector<std::vector<double> > H;
         
+        void init(std::vector<double> params_init, multivar_func ll, 
+            multivar_func_d dll, multivar_func_d2 d2ll);
+                
         multivar_ml_solver(std::vector<double> params_init,
             multivar_func ll, multivar_func_d dll, multivar_func_d2 d2ll);
-         
+        
+        multivar_ml_solver();
+
         void add_prior(int idx, multivar_prior_func ll, multivar_prior_func dll, 
             multivar_prior_func dll2);
         
