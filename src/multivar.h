@@ -231,9 +231,11 @@ class multivar_ml_solver{
         void add_prior(int idx, multivar_prior_func ll, multivar_prior_func dll, 
             multivar_prior_func dll2);
         
-        bool add_param(std::string name, std::vector<double>& data);
-        bool add_param(std::string name, std::vector<int>& data);
-        
+        bool add_data(std::string name, std::vector<double>& data);
+        bool add_data(std::string name, std::vector<int>& data);
+        bool add_data_fixed(std::string name, double data);
+        bool add_data_fixed(std::string name, int data);
+
         bool add_prior_param(int idx, std::string name, double data);
         bool add_prior_param(int idx, std::string name, int data);
         

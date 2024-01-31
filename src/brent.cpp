@@ -105,7 +105,7 @@ void brentSolver::set_maxiter(int i){
 }
 
 // Add in data for log likelihood function
-bool brentSolver::add_param(string name, std::vector<double>& dat){
+bool brentSolver::add_data(string name, std::vector<double>& dat){
     // Make sure dimensions agree
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
@@ -121,7 +121,7 @@ bool brentSolver::add_param(string name, std::vector<double>& dat){
     return true;
 }
 
-bool brentSolver::add_param(string name, std::vector<int>& dat){
+bool brentSolver::add_data(string name, std::vector<int>& dat){
     // Make sure dimensions agree
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){

@@ -165,7 +165,7 @@ bool multivar_ml_solver::add_prior_param(int idx, string name, int data){
     return true;
 }
 
-bool multivar_ml_solver::add_param(string name, std::vector<double>& dat){
+bool multivar_ml_solver::add_data(string name, std::vector<double>& dat){
     if (!initialized){
         fprintf(stderr, "ERROR: not initialized\n");
         exit(1);
@@ -174,6 +174,10 @@ bool multivar_ml_solver::add_param(string name, std::vector<double>& dat){
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
         fprintf(stderr, "ERROR: data vectors do not have same dimensions\n");
+        return false;
+    }
+    if (param_double_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: already has data keyed to %s\n", name.c_str());
         return false;
     }
     this->n_data = nd;
@@ -184,7 +188,7 @@ bool multivar_ml_solver::add_param(string name, std::vector<double>& dat){
     return true;
 }
 
-bool multivar_ml_solver::add_param(string name, std::vector<int>& dat){
+bool multivar_ml_solver::add_data(string name, std::vector<int>& dat){
     if (!initialized){
         fprintf(stderr, "ERROR: not initialized\n");
         exit(1);
@@ -195,6 +199,10 @@ bool multivar_ml_solver::add_param(string name, std::vector<int>& dat){
         fprintf(stderr, "ERROR: data vectors do not have same dimensions\n");
         return false;
     }
+    if (param_int_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: already has data keyed to %s\n", name.c_str());
+        return false;
+    }
     this->n_data = nd;
     this->params_int_names.push_back(name);
     this->params_int_vals.push_back(dat.data());
@@ -203,6 +211,31 @@ bool multivar_ml_solver::add_param(string name, std::vector<int>& dat){
     return true;
 }
 
+bool multivar_ml_solver::add_data_fixed(string name, double dat){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
+    if (param_double_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: already has data keyed to %s\n", name.c_str());
+        return false;
+    }
+    param_double_cur.insert(make_pair(name, dat));
+    return true;
+}
+
+bool multivar_ml_solver::add_data_fixed(string name, int dat){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
+    if (param_int_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: already has data keyeed to %s\n", name.c_str());
+        return false;
+    }
+    param_int_cur.insert(make_pair(name, dat));
+    return true;
+}
 /**
  * This class can also have a mixture of components as one of its variables.
  * A mixture of components is a set of n fractions between 0 and 1, which must

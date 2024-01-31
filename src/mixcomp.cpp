@@ -214,7 +214,7 @@ mixcomp_solver::mixcomp_solver(vector<vector<double> >& mixfracs,
     string preset, vector<double>& data){
     if (preset == "ls" || preset == "LS" || preset == "lstsq"){
         solver = multivar_ml_solver({}, y_ls, dy_dx_ls, d2y_dx2_ls);
-        solver.add_param("y", data);       
+        solver.add_data("y", data);       
         solver.add_mixcomp(mixfracs);
     }
     else{
@@ -230,22 +230,22 @@ mixcomp_solver::mixcomp_solver(vector<vector<double> >& mixfracs,
     if (preset == "normal" || preset == "Normal" || preset == "gaussian" ||
         preset == "Gaussian" || preset == "norm" || preset == "gauss"){
         solver = multivar_ml_solver({}, y_norm, dy_dx_norm, d2y_dx2_norm);
-        solver.add_param("mu", data1);
-        solver.add_param("sigma", data2);
+        solver.add_data("mu", data1);
+        solver.add_data("sigma", data2);
         solver.add_mixcomp(mixfracs);
         return;
     }
     else if (preset == "beta" || preset == "Beta"){
         solver = multivar_ml_solver({}, y_beta, dy_dx_beta, d2y_dx2_beta);
-        solver.add_param("alpha", data1);
-        solver.add_param("beta", data2);
+        solver.add_data("alpha", data1);
+        solver.add_data("beta", data2);
         solver.add_mixcomp(mixfracs);
         return;
     }
     else if (preset == "binom" || preset == "binomial" || preset == "Binomial"){
         solver = multivar_ml_solver({}, y_binom, dy_dx_binom, d2y_dx2_binom);
-        solver.add_param("n", data1);
-        solver.add_param("k", data2);
+        solver.add_data("n", data1);
+        solver.add_data("k", data2);
         solver.add_mixcomp(mixfracs);
         return;
     }
