@@ -112,12 +112,15 @@ bool brentSolver::add_data(string name, std::vector<double>& dat){
         fprintf(stderr, "ERROR: data vectors do not have same dimensions\n");
         return false;
     }
+    if (param_double_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: %s already keyed to data\n", name.c_str());
+        return false;
+    }
     this->n_data = nd;
     this->params_double_names.push_back(name);
     this->params_double_vals.push_back(dat.data());
     this->param_double_cur.insert(make_pair(name, 0.0));
     this->param_double_ptr.push_back(&(this->param_double_cur.at(name)));
-    //this->params_double.insert(make_pair(name, dat));    
     return true;
 }
 
@@ -128,12 +131,33 @@ bool brentSolver::add_data(string name, std::vector<int>& dat){
         fprintf(stderr, "ERROR: data vectors do not have same dimensions\n");
         return false;
     }
+    if (this->param_int_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: %s already keyed to data\n", name.c_str());
+        return false;
+    }
     this->n_data = nd;
     this->params_int_names.push_back(name);
     this->params_int_vals.push_back(dat.data());
     this->param_int_cur.insert(make_pair(name, 0.0));
     this->param_int_ptr.push_back(&(this->param_int_cur.at(name)));
-    //this->params_int.insert(make_pair(name, dat));
+    return true;
+}
+
+bool brentSolver::add_data_fixed(string name, double dat){
+    if (param_double_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: %s already keyed to data\n", name.c_str());
+        return false;
+    }
+    param_double_cur.insert(make_pair(name, dat));
+    return true;
+}
+
+bool brentSolver::add_data_fixed(string name, int dat){
+    if (param_int_cur.count(name) > 0){
+        fprintf(stderr, "ERROR: %s already keyed to data\n", name.c_str());
+        return false;
+    }
+    param_int_cur.insert(make_pair(name, dat));
     return true;
 }
 

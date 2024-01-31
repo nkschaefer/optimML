@@ -135,6 +135,8 @@ class brentSolver{
         void add_prior(brent_func ll, brent_func dll, brent_func dll2);
         bool add_data(std::string name, std::vector<double>& data);
         bool add_data(std::string name, std::vector<int>& data);
+        bool add_data_fixed(std::string name, double data);
+        bool add_data_fixed(std::string name, int data);
         bool add_prior_param(std::string name, double data);
         bool add_prior_param(std::string name, int data);
         void constrain_pos();
