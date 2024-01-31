@@ -68,7 +68,7 @@ using namespace std;
 // ----- Solve for maximum likelihood of multivariate equation with -----
 // ----- known 1st and second derivatives                           -----
 
-multivar_ll_solver::multivar_ll_solver(vector<double> params_init,
+multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
     multivar_func ll, multivar_func_d dll, multivar_func_d2 dll2){
     
     srand(time(NULL));
@@ -122,7 +122,7 @@ multivar_ll_solver::multivar_ll_solver(vector<double> params_init,
 
 }
 
-void multivar_ll_solver::add_prior(int idx, multivar_prior_func ll,
+void multivar_ml_solver::add_prior(int idx, multivar_prior_func ll,
     multivar_prior_func dll, multivar_prior_func dll2){
     
     this->has_prior[idx] = true;
@@ -132,17 +132,17 @@ void multivar_ll_solver::add_prior(int idx, multivar_prior_func ll,
 
 }
 
-bool multivar_ll_solver::add_prior_param(int idx, string name, double data){
+bool multivar_ml_solver::add_prior_param(int idx, string name, double data){
     this->params_prior_double[idx].insert(make_pair(name, data));
     return true;
 }
 
-bool multivar_ll_solver::add_prior_param(int idx, string name, int data){
+bool multivar_ml_solver::add_prior_param(int idx, string name, int data){
     this->params_prior_int[idx].insert(make_pair(name, data));
     return true;
 }
 
-bool multivar_ll_solver::add_param(string name, std::vector<double>& dat){
+bool multivar_ml_solver::add_param(string name, std::vector<double>& dat){
     // Make sure dimensions agree
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
@@ -157,7 +157,7 @@ bool multivar_ll_solver::add_param(string name, std::vector<double>& dat){
     return true;
 }
 
-bool multivar_ll_solver::add_param(string name, std::vector<int>& dat){
+bool multivar_ml_solver::add_param(string name, std::vector<int>& dat){
     // Make sure dimensions agree
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
@@ -186,7 +186,7 @@ bool multivar_ll_solver::add_param(string name, std::vector<int>& dat){
  * p = f1c1 + f2c2 + f3c3, which will be exposed to the provided functions as the last
  * entry in x. 
  */
-bool multivar_ll_solver::add_mixcomp(vector<vector<double> >& dat){
+bool multivar_ml_solver::add_mixcomp(vector<vector<double> >& dat){
     // Make sure dimensions agree.
     int nd = dat.size();
     if (this->n_data != 0 && this->n_data != nd){
@@ -224,7 +224,7 @@ bool multivar_ll_solver::add_mixcomp(vector<vector<double> >& dat){
     return true;
 }
 
-bool multivar_ll_solver::add_mixcomp_fracs(vector<double>& fracs){
+bool multivar_ml_solver::add_mixcomp_fracs(vector<double>& fracs){
     if (fracs.size() != nmixcomp){
         fprintf(stderr, "ERROR: number of mixture props does not match stored data\n");
         return false;
@@ -239,7 +239,7 @@ bool multivar_ll_solver::add_mixcomp_fracs(vector<double>& fracs){
     return true;
 }
 
-void multivar_ll_solver::randomize_mixcomps(){
+void multivar_ml_solver::randomize_mixcomps(){
 
     // Randomly re-sample starting mixture proportions. Equivalent to sampling from
     // a Dirichlet distribution with all alpha_i = 1
@@ -254,7 +254,7 @@ void multivar_ll_solver::randomize_mixcomps(){
     }
 }
 
-bool multivar_ll_solver::set_param(int idx, double val){
+bool multivar_ml_solver::set_param(int idx, double val){
     if (idx >= n_param-nmixcomp){
         fprintf(stderr, "ERROR: illegal parameter index\n");
         return false;
@@ -279,7 +279,7 @@ bool multivar_ll_solver::set_param(int idx, double val){
     return true;
 }
 
-void multivar_ll_solver::constrain_pos(int idx){
+void multivar_ml_solver::constrain_pos(int idx){
     // Un-transform if necessary
     if (this->trans_log[idx]){
         return;
@@ -296,7 +296,7 @@ void multivar_ll_solver::constrain_pos(int idx){
     x[idx] = log(x[idx]);
 }
 
-void multivar_ll_solver::constrain_01(int idx){
+void multivar_ml_solver::constrain_01(int idx){
     
     // Un-transform if necessary
     if (this->trans_logit[idx]){
@@ -314,15 +314,15 @@ void multivar_ll_solver::constrain_01(int idx){
     x[idx] = logit(x[idx]);
 }
 
-void multivar_ll_solver::set_delta(double d){
+void multivar_ml_solver::set_delta(double d){
     this->delta_thresh = d;
 }
 
-void multivar_ll_solver::set_maxiter(int m){
+void multivar_ml_solver::set_maxiter(int m){
     this->maxiter = m;
 }
 
-void multivar_ll_solver::print_function_error(){
+void multivar_ml_solver::print_function_error(){
     fprintf(stderr, "parameters:\n");
     for (int i = 0; i < x_t_extern.size(); ++i){
         fprintf(stderr, "%d): %f\n", i, x_t_extern[i]);
@@ -338,7 +338,7 @@ void multivar_ll_solver::print_function_error(){
     }
 }
 
-void multivar_ll_solver::print_function_error_prior(int idx){
+void multivar_ml_solver::print_function_error_prior(int idx){
     fprintf(stderr, "parameter:\n");
     fprintf(stderr, "%d): %f\n", idx, x_t_extern[idx]);
     fprintf(stderr, "data:\n");
@@ -354,7 +354,7 @@ void multivar_ll_solver::print_function_error_prior(int idx){
 }
 
 // Evaluate log likelihood at current vector of values
-double multivar_ll_solver::eval_ll_x(int i){
+double multivar_ml_solver::eval_ll_x(int i){
     double f_x = 0.0;
     if (i >= 0){
         // Get log likelihood of one (current) row of data
@@ -385,7 +385,7 @@ parameter %d\n", j);
 
 
 
-double multivar_ll_solver::eval_ll_all(){
+double multivar_ml_solver::eval_ll_all(){
     double loglik = 0.0;
 
     // Transform all non-mixture component variables
@@ -441,7 +441,7 @@ double multivar_ll_solver::eval_ll_all(){
 
 // Evaluate derivative of log likelihood at current vector; store in 
 // gradient vector.
-void multivar_ll_solver::eval_dll_dx(int i){
+void multivar_ml_solver::eval_dll_dx(int i){
     if (i >= 0){
         for (int j = 0; j < n_param_extern; ++j){
             double dy_dt_this = dll_dx(x_t_extern, this->param_double_cur, this->param_int_cur, j);
@@ -514,7 +514,7 @@ parameter %d\n", j);
 
 // Evaluate second derivative at current parameter values; store results in
 // Hessian matrix.
-void multivar_ll_solver::eval_d2ll_dx2(int i){
+void multivar_ml_solver::eval_d2ll_dx2(int i){
 
     if (i >= 0){
 
@@ -690,7 +690,7 @@ on parameter %d\n", j);
     }
 }
 
-double multivar_ll_solver::eval_funcs(){
+double multivar_ml_solver::eval_funcs(){
     // Zero out stuff
     for (int i = 0; i < n_param; ++i){
         G[i] = 0.0;
@@ -839,7 +839,7 @@ double multivar_ll_solver::eval_funcs(){
     return loglik;
 }
 
-void multivar_ll_solver::fill_results(double llprev){
+void multivar_ml_solver::fill_results(double llprev){
     // Store un-transformed results
     for (int j = 0; j < n_param-nmixcomp; ++j){
         if (trans_log[j]){
@@ -875,7 +875,7 @@ void multivar_ll_solver::fill_results(double llprev){
  * local maximum and can change direction accordingly.
  *
  */
-bool multivar_ll_solver::check_negative_definite(){
+bool multivar_ml_solver::check_negative_definite(){
     vector<double> eig;
     get_eigenvalues(H, eig);
     bool neg_def = true;
@@ -891,7 +891,7 @@ bool multivar_ll_solver::check_negative_definite(){
 /**
  * Returns a signal for whether or not to break out of the solve routine.
  */
-bool multivar_ll_solver::backtrack(vector<double>& delta_vec, 
+bool multivar_ml_solver::backtrack(vector<double>& delta_vec, 
     double& loglik, double& llprev, double& delta){
 
     // Strategy for backtracking from 9.7.1 Numerical Recipes
@@ -1024,7 +1024,7 @@ bool multivar_ll_solver::backtrack(vector<double>& delta_vec,
     return true;
 }
 
-bool multivar_ll_solver::solve(){
+bool multivar_ml_solver::solve(){
     
     if (params_double_vals.size() == 0 && params_int_vals.size() == 0){
         fprintf(stderr, "ERROR: not initialized with data\n");

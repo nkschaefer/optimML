@@ -58,7 +58,7 @@ typedef std::function< double( double,
  * This class uses Newton-Raphson (with optional constraints) to find maximum 
  * likelihood estimates of an array of input variables.
  */
-class multivar_ll_solver{
+class multivar_ml_solver{
     private: 
         
         // How many variables in x?
@@ -217,7 +217,7 @@ class multivar_ll_solver{
         // Hessian
         std::vector<std::vector<double> > H;
         
-        multivar_ll_solver(std::vector<double> params_init,
+        multivar_ml_solver(std::vector<double> params_init,
             multivar_func ll, multivar_func_d dll, multivar_func_d2 d2ll);
          
         void add_prior(int idx, multivar_prior_func ll, multivar_prior_func dll, 
