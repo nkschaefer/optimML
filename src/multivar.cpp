@@ -15,6 +15,7 @@
 #include <utility>
 #include <math.h>
 #include <time.h>
+#include <random>
 #include "lstsq.h"
 #include "functions.h"
 #include "eig.h"
@@ -85,6 +86,12 @@ void multivar_ml_solver::init(vector<double> params_init, multivar_func ll,
         x_t.push_back(params_init[i]);
         x_t_extern.push_back(params_init[i]);
         x_skip.push_back(false);
+        dy_dt_extern.push_back(0.0);
+        vector<double> d2y_dt2_row;
+        for (int j = 0; j < params_init.size(); ++j){
+            d2y_dt2_row.push_back(0.0);
+        }
+        d2y_dt2_extern.push_back(d2y_dt2_row);
 
         results.push_back(0.0);
         se.push_back(0.0);
@@ -101,7 +108,6 @@ void multivar_ml_solver::init(vector<double> params_init, multivar_func ll,
         params_prior_double.push_back(m1);
         map<string, int> m2;
         params_prior_int.push_back(m2);
-
         
     }
     n_param = params_init.size();
@@ -113,7 +119,8 @@ void multivar_ml_solver::init(vector<double> params_init, multivar_func ll,
     log_likelihood = 0.0;
     
     nmixcomp = 0;
-    
+    has_prior_mixcomp = false;
+
     xval_max = 1e15;
     xval_min = 1e-15;
     xval_log_min = log(xval_min);
@@ -122,7 +129,6 @@ void multivar_ml_solver::init(vector<double> params_init, multivar_func ll,
     xval_logit_max = logit(1.0-xval_min);
 
 }
-
 
 multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
     multivar_func ll, multivar_func_d dll, multivar_func_d2 dll2){
@@ -280,7 +286,15 @@ bool multivar_ml_solver::add_mixcomp(vector<vector<double> >& dat){
     // Add a single slot in the variable array for this new variable
     this->n_param_extern = n_param + 1;
     this->x_t_extern.push_back(0.0);
-    
+    this->dy_dt_extern.push_back(0.0);
+    vector<double> lastrow;
+    for (int i = 0; i < d2y_dt2_extern.size(); ++i){
+        d2y_dt2_extern[i].push_back(0.0);    
+        lastrow.push_back(0.0);
+    }
+    lastrow.push_back(0.0);
+    d2y_dt2_extern.push_back(lastrow);
+
     // Initialize to an even pool
     this->nmixcomp = ncomp;
     for (int i = 0; i < ncomp; ++i){
@@ -289,6 +303,40 @@ bool multivar_ml_solver::add_mixcomp(vector<vector<double> >& dat){
         x_t.push_back(0.0);
         x_skip.push_back(false);
     }
+    return true;
+}
+
+/**
+ * If we are modeling mixture components, allow the user to add a Dirichlet prior
+ * over mixture components. The parameters of the distribution should be provided
+ * here.
+ */
+bool multivar_ml_solver::add_mixcomp_prior(std::vector<double>& alphas){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
+    if (this->nmixcomp == 0){
+        fprintf(stderr, "ERROR: dimension of prior parameters (%ld) does not equal the dimension of mixture components (%d)\n", alphas.size(), nmixcomp);
+        return false;
+    }
+    for (int i = 0; i < alphas.size(); ++i){
+        if (alphas[i] == 0.0){
+            fprintf(stderr, "ERROR: illegal value for Dirichlet parameter %d\n", i);
+            return false;
+        }
+    }
+    this->dirichlet_prior_mixcomp.clear();
+    this->dirichlet_prior_mixcomp = alphas;
+
+    // Create space in arrays that will store partial derivatives from function evaluations
+    this->dy_dt_mixcomp_prior.clear();
+    this->d2y_dt2_mixcomp_prior.clear();
+    for (int i = 0; i < alphas.size(); ++i){
+        dy_dt_mixcomp_prior.push_back(0.0);
+        d2y_dt2_mixcomp_prior.push_back(0.0);
+    }
+    has_prior_mixcomp = true;
     return true;
 }
 
@@ -316,16 +364,88 @@ void multivar_ml_solver::randomize_mixcomps(){
         fprintf(stderr, "ERROR: not initialized\n");
         exit(1);
     }
-    // Randomly re-sample starting mixture proportions. Equivalent to sampling from
-    // a Dirichlet distribution with all alpha_i = 1
-    double sum = 0.0;
+    if (has_prior_mixcomp){
+        // Draw randomly from the prior Dirichlet distribution to obtain starting values.
+        // Sample a Gamma variable for each alpha, then set proportion to each alpha / alpha_sum
+        vector<double> rands;
+        double randsum = 0.0;
+        for (int i = 0; i < nmixcomp; ++i){
+            
+            default_random_engine generator(time(NULL));
+            gamma_distribution<double> dist(dirichlet_prior_mixcomp[i], 1.0);
+            double samp = dist(generator);
+            randsum += samp;
+            rands.push_back(samp);
+        }
+        for (int i = 0; i < nmixcomp; ++i){
+            x[n_param-nmixcomp+i] = logit(rands[i]/randsum);
+        }
+    }
+    else{
+        // Randomly re-sample starting mixture proportions. Equivalent to sampling from
+        // a Dirichlet distribution with all alpha_i = 1
+        double sum = 0.0;
+        for (int i = 0; i < nmixcomp; ++i){
+            double r = (double)rand() / (double)RAND_MAX;
+            x[n_param-nmixcomp+i] = r;
+            sum += r;
+        }    
+        for (int i = 0; i < nmixcomp; ++i){
+            x[n_param-nmixcomp+i] = logit(x[n_param-nmixcomp+i]/sum);
+        }
+    }
+}
+
+/**
+ * Evaluate optional Dirichlet prior on mixture components
+ */
+double multivar_ml_solver::ll_mixcomp_prior(){
+    if (!has_prior_mixcomp){
+        return 0.0;
+    }
+    double ll = 0.0;
+    double alphasum = 0.0;
+    double alphasum_neg = 0.0;
     for (int i = 0; i < nmixcomp; ++i){
-        double r = (double)rand() / (double)RAND_MAX;
-        x[n_param-nmixcomp+i] = r;
-        sum += r;
-    }    
+        double x_i = x_t[n_param-nmixcomp+i];
+        ll += (dirichlet_prior_mixcomp[i] - 1.0)*log(x_i);
+        alphasum += dirichlet_prior_mixcomp[i];
+        alphasum_neg += lgamma(dirichlet_prior_mixcomp[i]);
+    }
+    ll += lgamma(alphasum);
+    ll -= alphasum_neg;
+    return ll;
+}
+
+/**
+ * Evaluate 1st derivative of optional Dirichlet prior on mixture components
+ */
+void multivar_ml_solver::dll_mixcomp_prior(){
+    if (!has_prior_mixcomp){
+        return;
+    }
+    // Fill dy_dt_mixcomp_prior
     for (int i = 0; i < nmixcomp; ++i){
-        x[n_param-nmixcomp+i] = logit(x[n_param-nmixcomp+i]/sum);
+        if (!x_skip[n_param-nmixcomp+i]){
+            double x_i = x_t[n_param-nmixcomp+i];
+            dy_dt_mixcomp_prior[i] = (dirichlet_prior_mixcomp[i] - 1.0)/x_i;
+        }
+    }
+}
+
+/**
+ * Evaluate 2nd derivative of optional Dirichlet prior on mixture components
+ */
+void multivar_ml_solver::d2ll_mixcomp_prior(){
+    if (!has_prior_mixcomp){
+        return;
+    }
+    // Fill d2y_dt2_mixcomp_prior
+    for (int i = 0; i < nmixcomp; ++i){
+        if (!x_skip[n_param-nmixcomp+i]){
+            double x_i = x_t[n_param-nmixcomp+i];
+            d2y_dt2_mixcomp_prior[i] = (1.0 - dirichlet_prior_mixcomp[i])/(x_i*x_i);
+        }
     }
 }
 
@@ -473,6 +593,10 @@ parameter %d\n", j);
                 f_x += ll;
             }
         }
+        if (nmixcomp > 0 && has_prior_mixcomp){
+            // Evaluate Dirichlet prior on mixture components
+            f_x += ll_mixcomp_prior();
+        }
     }
     return f_x;
 }
@@ -537,18 +661,18 @@ double multivar_ml_solver::eval_ll_all(){
 // gradient vector.
 void multivar_ml_solver::eval_dll_dx(int i){
     if (i >= 0){
+        dll_dx(x_t_extern, this->param_double_cur, this->param_int_cur, dy_dt_extern);
         for (int j = 0; j < n_param_extern; ++j){
-            double dy_dt_this = dll_dx(x_t_extern, this->param_double_cur, this->param_int_cur, j);
-            if (isnan(dy_dt_this) || isinf(dy_dt_this)){
+            if (isnan(dy_dt_extern[j]) || isinf(dy_dt_extern[j])){
                 fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", j);
                 print_function_error();
                 exit(1);
             }
             if (nmixcomp > 0 && j == n_param_extern-1){
-                dy_dp = dy_dt_this;
+                dy_dp = dy_dt_extern[j];
             }
             else{
-                dy_dt[j] = dy_dt_this;
+                dy_dt[j] = dy_dt_extern[j];
                 if (x_skip[j]){
                     G[j] = 0.0;
                     dt_dx[j] = 0.0;
@@ -597,6 +721,17 @@ parameter %d\n", j);
                 }
             }
         }
+        if (nmixcomp > 0 && has_prior_mixcomp){
+            // Evaluate Dirichlet prior on mixture components
+            // This fills dy_dt_dirichlet_prior
+            dll_mixcomp_prior();
+            for (int j = 0; j < nmixcomp; ++j){
+                int j2 = n_param-nmixcomp + j;
+                if (!x_skip[j2]){
+                    G[j2] += dy_dt_mixcomp_prior[j] * dt_dx[j2];
+                }
+            }
+        }
         /*
         for (int j = n_param-nmixcomp; j < n_param; ++j){
             fprintf(stderr, "dy_dp = %f dt_dx[%d] = %f\n", dy_dp, j, dt_dx[j]);
@@ -611,42 +746,33 @@ parameter %d\n", j);
 void multivar_ml_solver::eval_d2ll_dx2(int i){
 
     if (i >= 0){
-
-        // Handle second derivatives involving pairs of non-mix comps
-        // Also compute second derivatives wrt p (the summary mixture parameter) 
+        d2ll_dx2(x_t_extern, this->param_double_cur, this->param_int_cur, this->d2y_dt2_extern);
         for (int j = 0; j < n_param_extern; ++j){
             for (int k = 0; k < n_param_extern; ++k){
-                
-                bool j_is_p = nmixcomp > 0 && j == n_param_extern-1;
-                bool k_is_p = nmixcomp > 0 && k == n_param_extern-1;
-                                
-                double deriv2 = d2ll_dx2(x_t_extern, this->param_double_cur, this->param_int_cur, j, k);
-                if (isnan(deriv2) || isinf(deriv2)){
-                    fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function on \
-parameters: %d %d\n", j, k);
+                if (isnan(d2y_dt2_extern[j][k]) || isinf(d2y_dt2_extern[j][k])){
+                    fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function\n");
+                    fprintf(stderr, "parameters: %d %d\n", j, k);
                     print_function_error();
                     exit(1);
                 }
-
+                
+                bool j_is_p = nmixcomp > 0 && j == n_param_extern-1;
+                bool k_is_p = nmixcomp > 0 && k == n_param_extern-1;
+                
                 if (j_is_p && k_is_p){
-                    d2y_dp2 = deriv2;
+                    d2y_dp2 = d2y_dt2_extern[j][k];
+                }    
+                else if (j_is_p && !x_skip[k]){
+                    d2y_dpdt[k] = d2y_dt2_extern[j][k];
                 }
-                else if (j_is_p){
-                    if (!x_skip[k]){
-                        d2y_dpdt[k] = deriv2;
-                    }
+                else if (k_is_p && !x_skip[j]){
+                    d2y_dtdp[k] = d2y_dt2_extern[j][k];
                 }
-                else if (k_is_p){
-                    if (!x_skip[j]){
-                        d2y_dtdp[j] = deriv2;
-                    }
-                }
-                else{
-                    if (!x_skip[j] && !x_skip[k]){
-                        H[j][k] += deriv2 * d2t_dx2[j][k];
-                    }
+                else if (!x_skip[j] && !x_skip[k]){
+                    H[j][k] += d2y_dt2_extern[j][k] * d2t_dx2[j][k];
                 }
             }
+
         }
         if (nmixcomp > 0){
             double p = x_t_extern[x_t_extern.size()-1];
@@ -701,21 +827,6 @@ parameters: %d %d\n", j, k);
                         d2t_dx2[j_i][k_i] += (exp_neg2x * mixcompfracs[i][j]) / 
                             (exp_negx_p1_j_4 * mixcompsum_2);
                         
-                        /* 
-                        if (isnan(d2t_dx2[j_i][k_i]) || isinf(d2t_dx2[j_i][k_i])){
-                            
-                            d2t_dx2[j_i][k_i] = 0.0;
-                            fprintf(stderr, "h\n");
-                            fprintf(stderr, "%f\n", exp_negx);
-                            fprintf(stderr, "%f\n", exp_neg2x);
-                            fprintf(stderr, "%f %f %f\n", exp_negx_p1_j_2,
-                                exp_negx_p1_j_3, exp_negx_p1_j_4);
-                            fprintf(stderr, "%f %f %f\n", mixcompsum, mixcompsum_2,
-                                mixcompsum_3);
-                            exit(1);
-                        }
-                        */
-
                         H[j_i][k_i] += d2y_dp2 * dt_dx[j_i] * dt_dx[k_i] + 
                             dy_dp * d2t_dx2[j_i][k_i];
                         
@@ -730,12 +841,6 @@ parameters: %d %d\n", j, k);
                         d2t_dx2[j_i][k_i] += (2 * exp_negx_jminusk * mixcompsum_f) / 
                             (exp_negx_p1_j_2 * exp_negx_p1_k_2 * mixcompsum_3);
                         
-                        /* 
-                        if (isinf(d2t_dx2[j_i][k_i]) || isnan(d2t_dx2[j_i][k_i])){
-                            d2t_dx2[j_i][k_i] = 0.0;
-                        }
-                        */
-
                         H[j_i][k_i] += d2y_dp2 * dt_dx[j_i] * dt_dx[k_i] + 
                             dy_dp * d2t_dx2[j_i][k_i];
                         
@@ -746,14 +851,6 @@ parameters: %d %d\n", j, k);
     }
     else{
         for (int j = 0; j < n_param-nmixcomp; ++j){
-            /*
-            for (int k = 0; k < n_param-nmixcomp; ++k){
-                H[j][k] *= dt_dx[j] * dt_dx[k];
-                if (j == k){
-                    H[j][j] += dy_dt[j] * d2t_dx2[j][j];
-                }
-            }
-            */
             if (this->has_prior[j] && !x_skip[j]){
                 double d2llprior = (*d2ll_dx2_prior[j])(x_t[j], this->params_prior_double[j], 
                     this->params_prior_int[j]) * dt_dx[j] * dt_dx[j] + dy_dt_prior[j] * d2t_dx2[j][j]; 
@@ -766,21 +863,29 @@ on parameter %d\n", j);
                 H[j][j] += d2llprior;
             }
         }
-        /*
-        for (int j = 0; j < nmixcomp; ++j){
-            int j_i = n_param-nmixcomp+j;
-            // Handle 2nd derivatives involving all other mix props (and including self)
-            for (int k = 0; k < nmixcomp; ++k){
-                int k_i = n_param-nmixcomp+k;
-                H[j_i][k_i] += d2y_dp2 * dt_dx[j_i] * dt_dx[k_i] + dy_dp * d2t_dx2[j_i][k_i]; 
-            }
-            // Handle 2nd derivatives involving all other variables
-            for (int k = 0; k < n_param-nmixcomp; ++k){
-                H[j_i][k] += dt_dx[j_i] * d2y_dpdt[k];
-                H[k][j_i] += d2y_dtdp[k] * dt_dx[j_i];
+        if (nmixcomp > 0 && has_prior_mixcomp){
+            // Evaluate Dirichlet prior on mixture components
+            // This fills d2y_dt2_mixcomp_prior (represents diagonal elements only)
+            d2ll_mixcomp_prior();
+            for (int j = 0; j < nmixcomp; ++j){
+                int j2 = n_param-nmixcomp + j;
+                if (!x_skip[j2]){
+                    for (int k = 0; k < nmixcomp; ++k){
+                        int k2 = n_param-nmixcomp + k;
+                        if (!x_skip[k2]){
+                            if (j == k){
+                                H[j2][j2] += dt_dx[j2]*dt_dx[j2] * d2y_dt2_mixcomp_prior[j] + 
+                                    dy_dt_mixcomp_prior[j2] * d2t_dx2[j2][j2]; 
+                            }
+                            else{
+                                // Off diagonal second derivatives of prior are zero
+                                H[j2][k2] += dy_dt_mixcomp_prior[j2] * d2t_dx2[j2][k2];
+                            }
+                        }
+                    }
+                }
             }
         }
-        */
     }
 }
 
@@ -807,13 +912,23 @@ double multivar_ml_solver::eval_funcs(){
         }
     }
     else{
-        // We won't use these, but doing this anyway
         for (int i = 0; i < n_param_extern; ++i){
+            dy_dt_extern[i] = 0.0;
+            for (int j = 0; j < n_param_extern; ++j){
+                d2y_dt2_extern[i][j] = 0.0;
+            }    
+            // We won't use these, but doing this anyway
             d2y_dtdp[i] = 0.0;
             d2y_dpdt[i] = 0.0;
         }
     }
-    
+    if (nmixcomp > 0 && has_prior_mixcomp){
+        for (int i = 0; i < nmixcomp; ++i){
+            dy_dt_mixcomp_prior[i] = 0.0;
+            d2y_dt2_mixcomp_prior[i] = 0.0;
+        }
+    }
+
     // Un-transform variables and compute partial 1st and 2nd derivatives
     // wrt transformations
     

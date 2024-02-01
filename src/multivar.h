@@ -36,18 +36,18 @@ typedef std::function< double ( std::vector<double>&,
 // Same as above, but also index into parameter vector for variable
 // whose first derivative is being evaluated
 
-typedef std::function< double ( std::vector<double>&,
+typedef std::function< void ( std::vector<double>&,
     std::map<std::string, double>&,
     std::map<std::string, int>&,
-    int ) > multivar_func_d;
+    std::vector<double>& ) > multivar_func_d;
 
 // Same as above, but also two indices into parameter vector for
 // variables involved in second derivative (first wrt i, then wrt j)
 
-typedef std::function< double ( std::vector<double>&,
+typedef std::function< void ( std::vector<double>&,
     std::map<std::string, double>&,
     std::map<std::string, int>&,
-    int, int ) > multivar_func_d2;
+    std::vector<std::vector<double> >& ) > multivar_func_d2;
 
 // Function for prior distributions over individual x variables
 typedef std::function< double( double,
@@ -79,6 +79,14 @@ class multivar_ml_solver{
         // Current values of transformed independent variables that aren't mixture
         // components
         std::vector<double> x_t_extern;
+        
+        // Allow an external function to return derivative wrt all variables under
+        // consideration in one function call
+        std::vector<double> dy_dt_extern;
+
+        // Allow an external function to return all second partial derivatives 
+        // in one function call
+        std::vector<std::vector<double> > d2y_dt2_extern;
 
         // Current values of derivative of transformation function wrt x
         std::vector<double> dt_dx;
@@ -106,6 +114,9 @@ class multivar_ml_solver{
         multivar_func_d2 d2ll_dx2;
         
         std::vector<bool> has_prior;
+        // Allow users to provide a Dirichlet prior over mixture components (optional)
+        bool has_prior_mixcomp;
+        std::vector<double> dirichlet_prior_mixcomp;
 
         // How to we compute log likelihood of prior on each variable? (optional)
         std::vector<multivar_prior_func*> ll_x_prior;
@@ -114,6 +125,14 @@ class multivar_ml_solver{
         // How to we compute 2nd derivative of log likelihood of prior on each variable? (optional)
         std::vector<multivar_prior_func*> d2ll_dx2_prior;
         
+        // Fixed functions for prior for mixture components: only allow Dirichlet distribution
+        double ll_mixcomp_prior();
+        std::vector<double> dy_dt_mixcomp_prior;
+        void dll_mixcomp_prior();
+        // Don't need to store off-diagonals since there are none
+        std::vector<double> d2y_dt2_mixcomp_prior;
+        void d2ll_mixcomp_prior();
+                
         // What is the maximum allowable value for any (un-transformed) variable to take?
         double xval_max;
         // What is the minimum allowable value for any (un-transformed) variable to take?
@@ -241,6 +260,8 @@ class multivar_ml_solver{
         
         bool add_mixcomp(std::vector<std::vector<double> >& data);
         bool add_mixcomp_fracs(std::vector<double>& fracs);
+        bool add_mixcomp_prior(std::vector<double>& alphas);
+
         void randomize_mixcomps();
         bool set_param(int idx, double val);
 

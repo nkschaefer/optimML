@@ -44,13 +44,13 @@ class mixcomp_solver{
             std::map<std::string, double>& data_d,
             std::map<std::string, int>& data_i);
         // First derivative
-        static double dy_dx_ls(std::vector<double>& params, 
+        static void dy_dx_ls(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx);
+            std::map<std::string, int>& data_i, std::vector<double>& results);
         // Second derivative
-        static double d2y_dx2_ls(std::vector<double>& params, 
+        static void d2y_dx2_ls(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx1, int idx2);
+            std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
         
         // --- Normal ---
         // Log likelihood function
@@ -58,13 +58,13 @@ class mixcomp_solver{
             std::map<std::string, double>& data_d,
             std::map<std::string, int>& data_i);
         // First derivative
-        static double dy_dx_norm(std::vector<double>& params, 
+        static void dy_dx_norm(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx);
+            std::map<std::string, int>& data_i, std::vector<double>& results);
         // Second derivative
-        static double d2y_dx2_norm(std::vector<double>& params, 
+        static void d2y_dx2_norm(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx1, int idx2);
+            std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
 
         // --- Beta ---
         // Log likelihood function
@@ -72,13 +72,13 @@ class mixcomp_solver{
             std::map<std::string, double>& data_d,
             std::map<std::string, int>& data_i);
         // First derivative
-        static double dy_dx_beta(std::vector<double>& params, 
+        static void dy_dx_beta(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx);
+            std::map<std::string, int>& data_i, std::vector<double>& results);
         // Second derivative
-        static double d2y_dx2_beta(std::vector<double>& params, 
+        static void d2y_dx2_beta(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx1, int idx2);
+            std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
 
         // --- Binomial ---
         // Log likelihood function
@@ -86,13 +86,13 @@ class mixcomp_solver{
             std::map<std::string, double>& data_d,
             std::map<std::string, int>& data_i);
         // First derivative
-        static double dy_dx_binom(std::vector<double>& params, 
+        static void dy_dx_binom(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx);
+            std::map<std::string, int>& data_i, std::vector<double>& results);
         // Second derivative
-        static double d2y_dx2_binom(std::vector<double>& params, 
+        static void d2y_dx2_binom(std::vector<double>& params, 
             std::map<std::string, double>& data_d,
-            std::map<std::string, int>& data_i, int idx1, int idx2);
+            std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
 
     public:
         
@@ -105,6 +105,7 @@ class mixcomp_solver{
 
         bool add_mixcomp_fracs(std::vector<double>& fracs);
         void randomize_mixcomps();
+        bool add_mixcomp_prior(std::vector<double>& alphas);
         void set_delta(double d);
         void set_maxiter(int i); 
         bool solve();

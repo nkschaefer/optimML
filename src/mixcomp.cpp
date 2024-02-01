@@ -68,26 +68,20 @@ double mixcomp_solver::y_ls(vector<double>& x, map<string, double>& params_d,
 /**
  * dy_dx least squares
  */
-double mixcomp_solver::dy_dx_ls(vector<double>& x, map<string, double>& params_d, 
-    map<string, int>& params_i, int idx){
-    if (idx != 0){
-        return 0;
-    }
+void mixcomp_solver::dy_dx_ls(vector<double>& x, map<string, double>& params_d, 
+    map<string, int>& params_i, vector<double>& results){
     // Again, operating on negative sum of squares instead of positive, so we can
     // maximize
-    return -2*x[0] + 2*params_d["y"];
+    results[0] = -2*x[0] + 2*params_d["y"];
 }
 
 /**
  * d^2y/dx^2 least squares
  */
-double mixcomp_solver::d2y_dx2_ls(vector<double>& x, map<string, double>& params_d,
-    map<string, int>& params_i, int idx1, int idx2){
-    if (idx1 != 0 || idx2 != 0){
-        return 0;
-    }
+void mixcomp_solver::d2y_dx2_ls(vector<double>& x, map<string, double>& params_d,
+    map<string, int>& params_i, vector<vector<double> >& results){
     // Operating on negative sum of squares instead of positive, so we can maximize
-    return -2.0;
+    results[0][0] = -2.0;
 }
 
 /**
@@ -106,23 +100,17 @@ double mixcomp_solver::y_norm(vector<double>& x, map<string, double>& params_d,
 /**
  * dy_dx Normal
  */
-double mixcomp_solver::dy_dx_norm(vector<double>& x, map<string, double>& params_d,
-    map<string, int>& params_i, int idx){
-    if (idx != 0){
-        return 0;
-    }
-    return (x[0]-params_d["mu"])/(params_d["sigma"] * params_d["sigma"]);
+void mixcomp_solver::dy_dx_norm(vector<double>& x, map<string, double>& params_d,
+    map<string, int>& params_i, vector<double>& results){
+    results[0] = (x[0]-params_d["mu"])/(params_d["sigma"] * params_d["sigma"]);
 }
 
 /**
  * d^2y/dx^2 Normal
  */
-double mixcomp_solver::d2y_dx2_norm(vector<double>& x, map<string, double>& params_d,
-    map<string, int>& params_i, int idx1, int idx2){
-    if (idx1 != 0 || idx2 != 0){
-        return 0;
-    }
-    return 1.0/(params_d["sigma"] * params_d["sigma"]);
+void mixcomp_solver::d2y_dx2_norm(vector<double>& x, map<string, double>& params_d,
+    map<string, int>& params_i, vector<vector<double> >& results){
+    results[0][0] = 1.0/(params_d["sigma"] * params_d["sigma"]);
 }
 
 /**
@@ -139,27 +127,21 @@ double mixcomp_solver::y_beta(vector<double>& x, map<string, double>& params_d,
 /**
  * dy_dx Beta
  */
-double mixcomp_solver::dy_dx_beta(vector<double>& x, map<string, double>& params_d,
-    map<string, int>& params_i, int idx){
-    if (idx != 0){
-        return 0;
-    }
+void mixcomp_solver::dy_dx_beta(vector<double>& x, map<string, double>& params_d,
+    map<string, int>& params_i, vector<double>& results){
     double alpha = params_d["alpha"];
     double beta = params_d["beta"];
-    return (alpha- 1.0)/x[0] - (beta - 1.0)/(1.0-x[0]);
+    results[0] = (alpha- 1.0)/x[0] - (beta - 1.0)/(1.0-x[0]);
 }
 
 /**
  * d^2y_dx^2 Beta
  */
-double mixcomp_solver::d2y_dx2_beta(vector<double>& x, map<string, double>& params_d,
-    map<string, int>& params_i, int idx1, int idx2){
-    if (idx1 != 0 || idx2 != 0){
-        return 0.0;
-    }
+void mixcomp_solver::d2y_dx2_beta(vector<double>& x, map<string, double>& params_d,
+    map<string, int>& params_i, vector<vector<double> >& results){
     double alpha = params_d["alpha"];
     double beta = params_d["beta"];
-    return (1.0-alpha)/(x[0]*x[0]) + (1.0-beta)/pow(1.0-x[0], 2);
+    results[0][0] = (1.0-alpha)/(x[0]*x[0]) + (1.0-beta)/pow(1.0-x[0], 2);
 }
 
 /**
@@ -182,32 +164,26 @@ double mixcomp_solver::y_binom(vector<double>& x, map<string, double>& params_d,
 }
 
 /**
- * dy_dx Beta
+ * dy_dx Binomial
  */
-double mixcomp_solver::dy_dx_binom(vector<double>& x, map<string, double>& params_d,
-    map<string, int>& params_i, int idx){
-    if (idx != 0){
-        return 0;
-    }
+void mixcomp_solver::dy_dx_binom(vector<double>& x, map<string, double>& params_d,
+    map<string, int>& params_i, vector<double>& results){
     double n = params_d["n"];
     double k = params_d["k"];
     double p = x[0];
-    return (k-n*p)/(p - p*p);
+    results[0] = (k-n*p)/(p - p*p);
 }
 
 /**
- * d^2y_dx^2 Beta
+ * d^2y_dx^2 Binomial
  */
-double mixcomp_solver::d2y_dx2_binom(vector<double>& x, map<string, double>& params_d,
-    map<string, int>& params_i, int idx1, int idx2){
-    if (idx1 != 0 || idx2 != 0){
-        return 0.0;
-    }
+void mixcomp_solver::d2y_dx2_binom(vector<double>& x, map<string, double>& params_d,
+    map<string, int>& params_i, vector<vector<double> >& results){
     double n = params_d["n"];
     double k = params_d["k"];
     double p = x[0];
     
-    return (k*(2*p - 1) - n*p*p)/(pow(p-1, 2) * p*p);
+    results[0][0] = (k*(2*p - 1) - n*p*p)/(pow(p-1, 2) * p*p);
 }
 
 mixcomp_solver::mixcomp_solver(vector<vector<double> >& mixfracs, 
@@ -261,6 +237,10 @@ bool mixcomp_solver::add_mixcomp_fracs(vector<double>& fracs){
 
 void mixcomp_solver::randomize_mixcomps(){
     solver.randomize_mixcomps();
+}
+
+bool mixcomp_solver::add_mixcomp_prior(vector<double>& alphas){
+    return solver.add_mixcomp_prior(alphas);
 }
 
 void mixcomp_solver::set_delta(double d){
