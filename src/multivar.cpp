@@ -97,9 +97,9 @@ void multivar_ml_solver::init(vector<double> params_init, multivar_func ll,
         se.push_back(0.0);
 
         has_prior.push_back(false);
-        ll_x_prior.push_back(NULL);
-        dll_dx_prior.push_back(NULL);
-        d2ll_dx2_prior.push_back(NULL);
+        ll_x_prior.push_back(dummy_prior_func);
+        dll_dx_prior.push_back(dummy_prior_func);
+        d2ll_dx2_prior.push_back(dummy_prior_func);
 
         trans_log.push_back(false);
         trans_logit.push_back(false);  
@@ -139,18 +139,22 @@ multivar_ml_solver::multivar_ml_solver(){
     initialized = false;
 }
 
-void multivar_ml_solver::add_prior(int idx, multivar_prior_func ll,
+bool multivar_ml_solver::add_prior(int idx, multivar_prior_func ll,
     multivar_prior_func dll, multivar_prior_func dll2){
     
     if (!initialized){
         fprintf(stderr, "ERROR: not initialized\n");
-        exit(1);
+        return false;
+    }
+    if (idx >= n_param-nmixcomp){
+        fprintf(stderr, "ERROR: index %d out of bounds\n", idx);
+        return false;
     }
     this->has_prior[idx] = true;
-    this->ll_x_prior[idx] = &ll;
-    this->dll_dx_prior[idx] = &dll;
-    this->d2ll_dx2_prior[idx] = &dll2;
-
+    this->ll_x_prior[idx] = ll;
+    this->dll_dx_prior[idx] = dll;
+    this->d2ll_dx2_prior[idx] = dll2;
+    return true;
 }
 
 bool multivar_ml_solver::add_prior_param(int idx, string name, double data){
@@ -449,6 +453,136 @@ void multivar_ml_solver::d2ll_mixcomp_prior(){
     }
 }
 
+/**
+ * Helper for truncated normal LL calculations
+ */
+double multivar_ml_solver::phi(double x){
+    return  0.5*(1 + erf(x / sqrt(2)));
+}
+
+/**
+ * Helper for normal LL calculations
+ */
+double multivar_ml_solver::dnorm(double x, double mu, double sigma){
+    static double sq2pi = sqrt(2.0 * M_PI);
+    return -0.5 * pow((x-mu)/sigma, 2) - log(sigma * sq2pi);
+}
+
+/**
+ * Built-in prior function for input variables: (truncated) normal
+ */
+double multivar_ml_solver::ll_prior_normal(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    bool trunc = false;
+    double trunc_low;
+    double trunc_high;
+    if (params_d.count("a") > 0 && params_d.count("b") > 0){
+        trunc_low = params_d["a"];
+        trunc_high = params_d["b"];
+        trunc = true;
+    }
+    if (trunc){
+        if (x < trunc_low || x > trunc_high){
+            return log(0);
+        }
+    }
+    double mu = params_d["mu"];
+    double sigma = params_d["sigma"];
+    return dnorm(x, mu, sigma) - log(phi((1.0-mu)/sigma) - phi((0.0-mu)/sigma));
+        
+}
+/**
+ * Placeholder to fill in prior function arrays until replaced with 
+ * a real function
+ */
+double multivar_ml_solver::dummy_prior_func(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    return 0.0;
+}
+
+double multivar_ml_solver::dll_prior_normal(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    // Truncation no longer matters for derivatives wrt independent variable
+    double mu = params_d["mu"];
+    double sigma = params_d["sigma"];
+    return -((x-mu)/(sigma*sigma));
+}
+
+double multivar_ml_solver::d2ll_prior_normal(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double mu = params_d["mu"];
+    double sigma = params_d["sigma"];
+    return -1.0/(sigma*sigma);
+}
+
+double multivar_ml_solver::ll_prior_beta(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double a = params_d["alpha"];
+    double b = params_d["beta"];
+    return (a-1.0)*log(x) + (b-1)*log(1.0-x) - (lgamma(a) + lgamma(b) - lgamma(a+b));
+}
+
+double multivar_ml_solver::dll_prior_beta(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double a = params_d["alpha"];
+    double b = params_d["beta"];
+    return (a-1.0)/x - (b-1.0)/(1.0-x);
+}
+
+double multivar_ml_solver::d2ll_prior_beta(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double a = params_d["alpha"];
+    double b = params_d["beta"];
+    return (1.0-a)/(x*x) + (1.0-b)/((1.0-x)*(1.0-x));
+}
+
+bool multivar_ml_solver::add_normal_prior(int idx, double mu, double sigma){
+    if (sigma == 0){
+        fprintf(stderr, "ERROR: sigma cannot equal 0\n");
+        return false;
+    }
+    if (!add_prior(idx, ll_prior_normal, dll_prior_normal, d2ll_prior_normal)){
+        return false;
+    }
+    if (!add_prior_param(idx, "mu", mu) || !add_prior_param(idx, "sigma", sigma)){
+        return false;
+    }
+    return true;
+}
+
+bool multivar_ml_solver::add_truncated_normal_prior(int idx, double mu, double sigma, double a, double b){
+    if (b <= a){
+        fprintf(stderr, "ERROR: lower bound of truncated normal set above upper bound\n");
+        return false;
+    }
+    else if (sigma == 0){
+        fprintf(stderr, "ERROR: sigma cannot equal 0\n");
+        return false;
+    }
+    if (!add_prior(idx, ll_prior_normal, dll_prior_normal, d2ll_prior_normal)){
+        return false;
+    }
+    if (!add_prior_param(idx, "mu", mu) || !add_prior_param(idx, "sigma", sigma) || 
+        !add_prior_param(idx, "a", a) || !add_prior_param(idx, "b", b)){
+        return false;
+    }
+    return true;
+}
+
+bool multivar_ml_solver::add_beta_prior(int idx, double alpha, double beta){
+    if (alpha == 0 || beta == 0){
+        fprintf(stderr, "ERROR: alpha and beta cannot equal 0\n");
+        return false;
+    }
+    if (!add_prior(idx, ll_prior_beta, dll_prior_beta, d2ll_prior_beta)){
+        return false;
+    }
+    if (!add_prior_param(idx, "alpha", alpha) || !add_prior_param(idx, "beta", beta)){
+        return false;
+    }
+    return true;
+}
+
 bool multivar_ml_solver::set_param(int idx, double val){
     if (!initialized){
         fprintf(stderr, "ERROR: not initialized\n");
@@ -583,7 +717,7 @@ double multivar_ml_solver::eval_ll_x(int i){
     else{
         for (int j = 0; j < n_param-nmixcomp; ++j){
             if (this->has_prior[j]){
-                double ll = (*ll_x_prior[j])(x_t_extern[j], this->params_prior_double[j], this->params_prior_int[j]);
+                double ll = ll_x_prior[j](x_t_extern[j], this->params_prior_double[j], this->params_prior_int[j]);
                 if (isnan(ll) || isinf(ll)){
                     fprintf(stderr, "ERROR: illegal value returned by prior log likelihood function on \
 parameter %d\n", j);
@@ -708,7 +842,7 @@ void multivar_ml_solver::eval_dll_dx(int i){
                     // Keep it at zero
                 }
                 else{
-                    double dllprior = (*dll_dx_prior[j])(x_t[j], this->params_prior_double[j], 
+                    double dllprior = dll_dx_prior[j](x_t[j], this->params_prior_double[j], 
                         this->params_prior_int[j]);
                     if (isnan(dllprior) || isinf(dllprior)){
                         fprintf(stderr, "ERROR: illegal value returned by prior gradient function on \
@@ -852,7 +986,7 @@ void multivar_ml_solver::eval_d2ll_dx2(int i){
     else{
         for (int j = 0; j < n_param-nmixcomp; ++j){
             if (this->has_prior[j] && !x_skip[j]){
-                double d2llprior = (*d2ll_dx2_prior[j])(x_t[j], this->params_prior_double[j], 
+                double d2llprior = d2ll_dx2_prior[j](x_t[j], this->params_prior_double[j], 
                     this->params_prior_int[j]) * dt_dx[j] * dt_dx[j] + dy_dt_prior[j] * d2t_dx2[j][j]; 
                 if (isnan(d2llprior) || isinf(d2llprior)){
                     fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function for prior \
@@ -928,7 +1062,6 @@ double multivar_ml_solver::eval_funcs(){
             d2y_dt2_mixcomp_prior[i] = 0.0;
         }
     }
-
     // Un-transform variables and compute partial 1st and 2nd derivatives
     // wrt transformations
     
@@ -975,7 +1108,6 @@ double multivar_ml_solver::eval_funcs(){
         }
         x_t_extern[i] = x_t[i];
     }
-    
     // Handle all mixture component variables
     mixcompsum = 0.0;
 
@@ -995,7 +1127,6 @@ double multivar_ml_solver::eval_funcs(){
 
     mixcompsum_2 = mixcompsum * mixcompsum;
     mixcompsum_3 = mixcompsum_2 * mixcompsum;
-   
     // Visit each data point
     double loglik = 0.0;
     for (int i = 0; i < n_data; ++i){
@@ -1020,13 +1151,11 @@ double multivar_ml_solver::eval_funcs(){
             }
             x_t_extern[x_t_extern.size()-1] = p;
         }
-        
         // Evaluate functions
         loglik += eval_ll_x(i);
         eval_dll_dx(i);
         eval_d2ll_dx2(i);
     }
-    
     // Let prior distributions contribute and wrap up calculations
     // at the end, independent of data
     loglik += eval_ll_x(-1);
@@ -1044,7 +1173,6 @@ double multivar_ml_solver::eval_funcs(){
         }
     }
     */
-
     return loglik;
 }
 
@@ -1306,7 +1434,7 @@ bool multivar_ml_solver::solve(){
         
         // Compute everything    
         double loglik = eval_funcs();
-        //fprintf(stderr, "LL %f -> %f\n", llprev, loglik);
+        fprintf(stderr, "LL %f -> %f\n", llprev, loglik);
         
         // Store maximum value of log likelihood encountered so far
         // (and associated parameters), in case anything weird happens later

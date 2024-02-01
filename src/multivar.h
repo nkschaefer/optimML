@@ -119,11 +119,11 @@ class multivar_ml_solver{
         std::vector<double> dirichlet_prior_mixcomp;
 
         // How to we compute log likelihood of prior on each variable? (optional)
-        std::vector<multivar_prior_func*> ll_x_prior;
+        std::vector<multivar_prior_func> ll_x_prior;
         // How do we compute derivative of log likelihood of prior on each variable? (optional)
-        std::vector<multivar_prior_func*> dll_dx_prior;
+        std::vector<multivar_prior_func> dll_dx_prior;
         // How to we compute 2nd derivative of log likelihood of prior on each variable? (optional)
-        std::vector<multivar_prior_func*> d2ll_dx2_prior;
+        std::vector<multivar_prior_func> d2ll_dx2_prior;
         
         // Fixed functions for prior for mixture components: only allow Dirichlet distribution
         double ll_mixcomp_prior();
@@ -132,7 +132,26 @@ class multivar_ml_solver{
         // Don't need to store off-diagonals since there are none
         std::vector<double> d2y_dt2_mixcomp_prior;
         void d2ll_mixcomp_prior();
-                
+        
+        // Pre-set prior functions        
+        static double phi(double x);
+        static double dnorm(double x, double mu, double sigma);
+        static double ll_prior_normal(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double dll_prior_normal(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double d2ll_prior_normal(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double ll_prior_beta(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double dll_prior_beta(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double d2ll_prior_beta(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        
+        static double dummy_prior_func(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);        
+
         // What is the maximum allowable value for any (un-transformed) variable to take?
         double xval_max;
         // What is the minimum allowable value for any (un-transformed) variable to take?
@@ -247,7 +266,7 @@ class multivar_ml_solver{
         
         multivar_ml_solver();
 
-        void add_prior(int idx, multivar_prior_func ll, multivar_prior_func dll, 
+        bool add_prior(int idx, multivar_prior_func ll, multivar_prior_func dll, 
             multivar_prior_func dll2);
         
         bool add_data(std::string name, std::vector<double>& data);
@@ -257,6 +276,10 @@ class multivar_ml_solver{
 
         bool add_prior_param(int idx, std::string name, double data);
         bool add_prior_param(int idx, std::string name, int data);
+        
+        bool add_normal_prior(int idx, double mu, double sigma);
+        bool add_truncated_normal_prior(int idx, double mu, double sigma, double a, double b);
+        bool add_beta_prior(int idx, double alpha, double beta);
         
         bool add_mixcomp(std::vector<std::vector<double> >& data);
         bool add_mixcomp_fracs(std::vector<double>& fracs);
