@@ -29,10 +29,10 @@ For any given allele, you know the expected allele frequency in population 1, 2,
 
 You want to solve for the mixture components $m_1$, $m_2$, and $m_3$, where each denotes the proportion of the pool made up of individuals from each population. These are subject to these constraints: 
 
-$$0 < m_1 < 1$$
-$$0 < m_2 < 1$$
-$$0 < m_3 < 1$$
-$$\sum\limits_{j=1}^{3}(m_j) = 1$$
+$$0 < m_1 < 1
+0 < m_2 < 1
+0 < m_3 < 1
+\sum\limits_{j=1}^{3}(m_j) = 1$$
 
 To accomodate these constraints, each variable is logit transformed and divided by the sum of all mixture component variables. In other words, each mixture component variable appears in the log likelihood function as follows: $$t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum\limits_{k=1}^n \frac{1}{e^{-m_k} + 1}}$$
 
