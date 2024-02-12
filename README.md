@@ -23,8 +23,8 @@ You are interested in modeling your data as coming from a mixture of three popul
 
 For any given allele, you know the expected allele frequency in population 1, 2, and 3: $f_{i1} = E[A_i | P_1], f_{i2} = E[A_i | P_2], f_{i3} = E[A_i | P_3]$
 
-You want to solve for the mixture components $m_1$, $m_2$, and $m_3$, where each denotes the proportion of the pool made up of individuals from each population, and $\sum_{j=1}^{3} (m_j) = 1$
+You want to solve for the mixture components $m_1$, $m_2$, and $m_3$, where each denotes the proportion of the pool made up of individuals from each population, and $\sum_{j=1}^{3}(m_j) = 1$
 
-To handle the requirement that for each $m_j$, $0 < m_j < 1$, and that all must sum to 1, each variable is logit transformed, and each appears in the log likelihood function as follows: $t(m_j) = 1/(e^(-m_j) + 1) / \sum_{k=1}^n (1/(e^(-m_k) + 1))$
+To handle the requirement that for each $m_j$, $0 < m_j < 1$, and that all must sum to 1, each variable is logit transformed, and each appears in the log likelihood function as follows: $t(m_j) = \frac{1}{e^(-m_j) + 1} / \sum_{k=1}^n (1/(e^(-m_k) + 1))$
 ## Requirements
 Only requires a C++11 compiler. Also depends on the [stlbfgs](https://github.com/nkschaefer/stlbfgs) library, which is included as a submodule. The original repository is [here](https://github.com/ultimaille/stlbfgs), and the forked version was modified to be compatible with older compilers. 
