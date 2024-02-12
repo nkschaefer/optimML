@@ -29,7 +29,7 @@ For any given allele, you know the expected allele frequency in population 1, 2,
 
 You want to solve for the mixture components $m_1$, $m_2$, and $m_3$, where each denotes the proportion of the pool made up of individuals from each population, and $\sum\limits_{j=1}^{3}(m_j) = 1$
 
-To handle the requirement that for each $m_j$, $0 < m_j < 1$, and that all must sum to 1, each variable is logit transformed, and each appears in the log likelihood function as follows: $$t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum\limits_{k=1}^n \frac{1}{e^{-m_k} + 1}}$$
+To handle the requirement that for each $m_j$, $0 < m_j < 1$, and that all must sum to 1, each variable is logit transformed and divided by the sum of all mixture component variables. In other words, each mixture component variable appears in the log likelihood function as follows: $$t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum\limits_{k=1}^n \frac{1}{e^{-m_k} + 1}}$$
 
 `multivar_ml_solver` handles all this behind the scenes and exposes a single variable $p_i = \sum\limits_{j=1}^3 f_{ij}m_j$ to the functions the user provided to evaluate the log likelihood and its gradient. In this case, the user would need to compare the value of $p_i$ at each function evaluation to the measured frequency of allele $i$ $A_i$. If the user has collected a reference allele count $r_i$ and alt allele count $a_i$ for each allele $i$, for example, this could be done by computing the binomial log likelihood of $a_i$ successes in $r_i + a_i$ draws with the parameter $p_i$.
 
