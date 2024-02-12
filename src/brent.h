@@ -94,7 +94,6 @@ class brentSolver{
         std::vector<double*> param_double_ptr;
         std::vector<int*> param_int_ptr;
 
-        
         // Map parameter name -> vector of doubles
         std::map<std::string, std::vector<double> > params_double;
         // Map parameter name -> vector of ints

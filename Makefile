@@ -8,11 +8,14 @@ LFLAGS=-L$(PREFIX)/lib
 
 all: lib/liboptimml.so lib/liboptimml.a
 
-lib/liboptimml.so: build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
-	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o -lstdc++
+lib/liboptimml.so: build/functions.o build/golden.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
+	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/golden.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o -lstdc++
 
-lib/liboptimml.a: build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
-	ar rcs lib/liboptimml.a build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
+lib/liboptimml.a: build/functions.o build/golden.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
+	ar rcs lib/liboptimml.a build/functions.o build/golden.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
+
+build/golden.o: src/golden.cpp src/golden.h src/functions.h
+	$(COMP) $(FLAGS) $(IFLAGS) -c src/golden.cpp -o build/golden.o
 
 build/brent.o: src/brent.cpp src/brent.h src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/brent.cpp -o build/brent.o
