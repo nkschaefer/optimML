@@ -105,6 +105,9 @@ class multivar_ml_solver{
         
         // Current values of first derivatives of prior distributions wrt transformed x
         std::vector<double> dy_dt_prior;
+        
+        // Optional: observation weights for weighted ML calculation
+        std::vector<double> weights;
 
         // How do we compute log likelihood?
         multivar_func ll_x;
@@ -151,6 +154,8 @@ class multivar_ml_solver{
         
         static double dummy_prior_func(double x, std::map<std::string, double>& params_d,
             std::map<std::string, int>& params_i);        
+        static void dummy_d2_func(std::vector<double>& params, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i, std::vector<std::vector<double> >& results);
 
         // What is the maximum allowable value for any (un-transformed) variable to take?
         double xval_max;
@@ -221,8 +226,11 @@ class multivar_ml_solver{
         // Also store square & cube to cut down on function evaluations
         double mixcompsum_2;
         double mixcompsum_3;
+        
+        const void eval_funcs_bfgs(const std::vector<double>& x, 
+            double& y, std::vector<double>& grad);
 
-        double eval_funcs();
+        //double eval_funcs();
 
         // Evaluate log likelihood at a given parameter value 
         double eval_ll_x(int i);       
@@ -242,10 +250,10 @@ class multivar_ml_solver{
         
         void fill_results(double ll);
         
-        bool check_negative_definite();
+        //bool check_negative_definite();
         
-        bool backtrack(std::vector<double>& deltavec,
-            double& loglik, double& loglik_prev, double& delta);
+        //bool backtrack(std::vector<double>& deltavec,
+        //    double& loglik, double& loglik_prev, double& delta);
         
         void print_function_error();
         void print_function_error_prior(int idx);
@@ -264,6 +272,9 @@ class multivar_ml_solver{
         multivar_ml_solver(std::vector<double> params_init,
             multivar_func ll, multivar_func_d dll, multivar_func_d2 d2ll);
         
+        multivar_ml_solver(std::vector<double> params_init,
+            multivar_func ll, multivar_func_d dll);
+
         multivar_ml_solver();
 
         bool add_prior(int idx, multivar_prior_func ll, multivar_prior_func dll, 
@@ -273,12 +284,14 @@ class multivar_ml_solver{
         bool add_data(std::string name, std::vector<int>& data);
         bool add_data_fixed(std::string name, double data);
         bool add_data_fixed(std::string name, int data);
+        
+        bool add_weights(std::vector<double>& weights);
 
         bool add_prior_param(int idx, std::string name, double data);
         bool add_prior_param(int idx, std::string name, int data);
         
         bool add_normal_prior(int idx, double mu, double sigma);
-        bool add_truncated_normal_prior(int idx, double mu, double sigma, double a, double b);
+        bool add_normal_prior(int idx, double mu, double sigma, double a, double b);
         bool add_beta_prior(int idx, double alpha, double beta);
         
         bool add_mixcomp(std::vector<std::vector<double> >& data);
@@ -297,6 +310,7 @@ class multivar_ml_solver{
         double log_likelihood;
 
         // Find root. 
+        //bool solve_newton();
         bool solve();
 
         // Result

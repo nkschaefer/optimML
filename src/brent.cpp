@@ -23,6 +23,81 @@ using namespace std;
 
 // ----- Brent's method root finder
 
+/**
+ * Helper for truncated normal LL calculations
+ */
+double brentSolver::phi(double x){
+    return  0.5*(1 + erf(x / sqrt(2)));
+}
+
+/**
+ * Helper for normal LL calculations
+ */
+double brentSolver::dnorm(double x, double mu, double sigma){
+    static double sq2pi = sqrt(2.0 * M_PI);
+    return -0.5 * pow((x-mu)/sigma, 2) - log(sigma * sq2pi);
+}
+
+/**
+ * Built-in prior function for input variables: (truncated) normal
+ */
+double brentSolver::ll_prior_normal(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    bool trunc = false;
+    double trunc_low;
+    double trunc_high;
+    if (params_d.count("a") > 0 && params_d.count("b") > 0){
+        trunc_low = params_d["a"];
+        trunc_high = params_d["b"];
+        trunc = true;
+    }
+    if (trunc){
+        if (x < trunc_low || x > trunc_high){
+            return log(0);
+        }
+    }
+    double mu = params_d["mu"];
+    double sigma = params_d["sigma"];
+    return dnorm(x, mu, sigma) - log(phi((1.0-mu)/sigma) - phi((0.0-mu)/sigma));
+}
+
+double brentSolver::dll_prior_normal(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    // Truncation no longer matters for derivatives wrt independent variable
+    double mu = params_d["mu"];
+    double sigma = params_d["sigma"];
+    return -((x-mu)/(sigma*sigma));
+}
+
+double brentSolver::d2ll_prior_normal(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double mu = params_d["mu"];
+    double sigma = params_d["sigma"];
+    return -1.0/(sigma*sigma);
+}
+
+double brentSolver::ll_prior_beta(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double a = params_d["alpha"];
+    double b = params_d["beta"];
+    return (a-1.0)*log(x) + (b-1)*log(1.0-x) - (lgamma(a) + lgamma(b) - lgamma(a+b));
+}
+
+double brentSolver::dll_prior_beta(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double a = params_d["alpha"];
+    double b = params_d["beta"];
+    return (a-1.0)/x - (b-1.0)/(1.0-x);
+}
+
+double brentSolver::d2ll_prior_beta(double x, map<string, double>& params_d,
+    map<string, int>& params_i){
+    double a = params_d["alpha"];
+    double b = params_d["beta"];
+    return (1.0-a)/(x*x) + (1.0-b)/((1.0-x)*(1.0-x));
+}
+
+
 // Set default values.
 void brentSolver::init(){
     this->has_d2ll = false;
@@ -36,6 +111,7 @@ void brentSolver::init(){
     this->root_found = false;
     this->se_found = false;
     this->has_prior = false;
+    this->log_likelihood = 0.0;
 }
 
 // Initialize without knowledge of second derivative
@@ -82,6 +158,29 @@ for log likelihood function.\n");
     this->has_prior = true;
 }
 
+void brentSolver::add_normal_prior(double mu, double sigma){
+    add_prior(ll_prior_normal, dll_prior_normal, d2ll_prior_normal);
+    add_prior_param("mu", mu);
+    add_prior_param("sigma", sigma);
+}
+
+/**
+ * Truncated normal distribution on (a, b)
+ */
+void brentSolver::add_normal_prior(double mu, double sigma, double a, double b){
+    add_prior(ll_prior_normal, dll_prior_normal, d2ll_prior_normal);
+    add_prior_param("mu", mu);
+    add_prior_param("sigma", sigma);
+    add_prior_param("a", a);
+    add_prior_param("b", b);
+}
+
+void brentSolver::add_beta_prior(double alpha, double beta){
+    add_prior(ll_prior_beta, dll_prior_beta, d2ll_prior_beta);
+    add_prior_param("alpha", alpha);
+    add_prior_param("beta", beta);
+}
+
 // Constrain independent variable to be positive
 void brentSolver::constrain_pos(){
     this->trans_log = true;
@@ -113,8 +212,17 @@ bool brentSolver::add_data(string name, std::vector<double>& dat){
         return false;
     }
     if (param_double_cur.count(name) > 0){
-        fprintf(stderr, "ERROR: %s already keyed to data\n", name.c_str());
-        return false;
+        //fprintf(stderr, "WARNING: %s already keyed to data. Overwriting\n", name.c_str());
+        int idx = -1;
+        for (int i = 0; i < params_double_names.size(); ++i){
+            if (params_double_names[i] == name){
+                idx = i;
+                break;
+            }
+        }
+        params_double_vals[idx] = dat.data();
+        //return false;
+        return true;
     }
     this->n_data = nd;
     this->params_double_names.push_back(name);
@@ -161,6 +269,15 @@ bool brentSolver::add_data_fixed(string name, int dat){
     return true;
 }
 
+bool brentSolver::add_weights(vector<double>& weights){
+    if (this->n_data != 0 && this->n_data != weights.size()){
+        fprintf(stderr, "ERROR: dimension of weights does not equal dimension of data\n");
+        return false;
+    }
+    this->weights = weights;
+    return true;
+}
+
 // Add in data for prior
 bool brentSolver::add_prior_param(string name, double dat){
     this->params_prior_double.insert(make_pair(name, dat));
@@ -176,11 +293,36 @@ bool brentSolver::add_prior_param(string name, int dat){
  * over the specified range.
  */
 void brentSolver::print(double lower, double upper, double step){
+    if (trans_log && (lower <= 0)){
+        fprintf(stderr, "ERROR: range given is out of bounds for log transformation\n");
+        return;
+    }
+    else if (trans_logit && (lower <= 0 || upper >= 1)){
+        fprintf(stderr, "ERROR: range given is out of bounds for logit transformation\n");
+        return;
+    }
     for (double x = lower; x <= upper; x += step){
-        double ll = eval_ll_x(x);
-        double deriv1 = eval_dll_dx(x);
+        double x_t = x;
+        if (this->trans_log){
+            x_t = log(x);
+        }
+        else if (this->trans_logit){
+            x_t = logit(x);
+        }
+        double ll = eval_ll_x(x_t);
+        double deriv1 = eval_dll_dx(x_t);
+        /*
+        if (this->trans_log){
+            double df_dt_x = exp(x);
+            deriv1 /= df_dt_x;
+        }
+        else if (this->trans_logit){
+            double df_dt_x = exp(-x) / pow(((exp(-x)) + 1), 2);
+            deriv1 /= df_dt_x;
+        }
+        */
         if (this->has_d2ll){
-            double deriv2 = eval_d2ll_dx2(x);
+            double deriv2 = eval_d2ll_dx2(x_t);
             fprintf(stdout, "%f\t%f\t%f\t%f\n", x, ll, deriv1, deriv2);
         }
         else{
@@ -207,10 +349,43 @@ double brentSolver::eval_ll_x(double x){
         for (int j = 0; j < this->params_int_names.size(); ++j){
             *(this->param_int_ptr[j]) = (this->params_int_vals[j][i]);
         }
-        f_x += ll_x(x_t, this->param_double_cur, this->param_int_cur);
+        double llx = ll_x(x_t, this->param_double_cur, this->param_int_cur);
+        if (isnan(llx) || isinf(llx)){
+            fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
+            fprintf(stderr, "parameter: %f\n", x_t);
+            fprintf(stderr, "data:\n");
+            for (map<string, double>::iterator it = param_double_cur.begin(); it != 
+                param_double_cur.end(); ++it){
+                fprintf(stderr, "%s = %f\n", it->first.c_str(), it->second);
+            }
+            for (map<string, int>::iterator it = param_int_cur.begin(); it != 
+                param_int_cur.end(); ++it){
+                fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
+            }
+            exit(1);
+        }
+        if (this->weights.size() > 0){
+            llx *= weights[i];
+        }
+        f_x += llx;
     }
     if (this->has_prior){
-        f_x += ll_x_prior(x_t, this->params_prior_double, this->params_prior_int);
+        double llx = ll_x_prior(x_t, this->params_prior_double, this->params_prior_int);
+        if (isinf(llx) || isnan(llx)){
+            fprintf(stderr, "ERROR: illegal value from prior function\n");
+            fprintf(stderr, "parameter: %f\n", x_t);
+            fprintf(stderr, "prior dist parameters:\n");
+            for (map<string, double>::iterator it = params_prior_double.begin(); it != 
+                params_prior_double.end(); ++it){
+                fprintf(stderr, "%s = %f\n", it->first.c_str(), it->second);
+            }
+            for (map<string, int>::iterator it = params_prior_int.begin(); it != 
+                params_prior_int.end(); ++it){
+                fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
+            }
+            exit(1);
+        }
+        f_x += llx;
     }
     return f_x;
 }
@@ -239,7 +414,11 @@ double brentSolver::eval_dll_dx(double x){
         for (int j = 0; j < this->params_int_names.size(); ++j){
             *(this->param_int_ptr[j]) = (this->params_int_vals[j][i]);
         }
-        f_x += dll_dx(x_t, this->param_double_cur, this->param_int_cur) * df_dt_x;
+        double w = 1.0;
+        if (this->weights.size() > 0){
+            w = this->weights[i];
+        }
+        f_x += dll_dx(x_t, this->param_double_cur, this->param_int_cur) * w * df_dt_x;
     }
     if (this->has_prior){
         f_x += dll_dx_prior(x_t, this->params_prior_double, this->params_prior_int) * df_dt_x; 
@@ -270,7 +449,11 @@ double brentSolver::eval_d2ll_dx2(double x){
         for (int j = 0; j < this->params_int_names.size(); ++j){
             *(this->param_int_ptr[j]) = (this->params_int_vals[j][i]);
         }
-        f_x += d2ll_dx2(x_t, this->param_double_cur, this->param_int_cur) * d2f_dt2_x;
+        double w = 1.0;
+        if (this->weights.size() > 0){
+            w = this->weights[i];
+        }
+        f_x += d2ll_dx2(x_t, this->param_double_cur, this->param_int_cur) * w * d2f_dt2_x;
     }
     if (this->has_prior){
         f_x += d2ll_dx2_prior(x_t, this->params_prior_double, this->params_prior_int) * d2f_dt2_x; 
@@ -292,6 +475,11 @@ double brentSolver::eval_d2ll_dx2(double x){
  * logit-transformation), according to class parameters.
  */
 double brentSolver::solve(double lower, double upper){
+    if (this->n_data == 0){
+        fprintf(stderr, "ERROR: no data added\n");
+        return 0.0;
+    }
+
     // Attempt to make interval feasible if transformations are being used.
     if (this->trans_log && lower == 0){
         lower += this->delta_thresh;
@@ -312,6 +500,7 @@ transformation of the data.\n", lower, upper);
         this->se_found = false;
         this->root = 0.0;
         this->se = 0.0;
+        this->log_likelihood = 0.0;
         return log(0.0);
     }
     
@@ -462,9 +651,11 @@ transformation of the data.\n", lower, upper);
         }
 
         if (ll_a > ll_c){
+            this->log_likelihood = ll_a;
             return a_t;
         }
         else{
+            this->log_likelihood = ll_c;
             return c_t;
         }
     }
@@ -580,6 +771,7 @@ transformation of the data.\n", lower, upper);
             this->se = 0.0;
         }
     }
+    this->log_likelihood = eval_ll_x(b);
     return b_t;
 }
 

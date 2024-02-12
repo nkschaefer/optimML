@@ -105,6 +105,9 @@ class brentSolver{
         // For prior: map parameter name -> int
         std::map<std::string, int> params_prior_int;
         
+        // Optional weights on individual observations
+        std::vector<double> weights;
+
         // Should the independent variable be constrained to positive numbers?
         bool trans_log;
         
@@ -126,6 +129,21 @@ class brentSolver{
         double eval_dll_dx(double x);
         // Evaluate second derivative of log likelihood function at given parameter value
         double eval_d2ll_dx2(double x);
+        
+        static double phi(double x);
+        static double dnorm(double x, double mu, double sigma);
+        static double ll_prior_normal(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double dll_prior_normal(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double d2ll_prior_normal(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double ll_prior_beta(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double dll_prior_beta(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
+        static double d2ll_prior_beta(double x, std::map<std::string, double>& params_d,
+            std::map<std::string, int>& params_i);
 
     public:
 
@@ -133,10 +151,14 @@ class brentSolver{
         brentSolver(brent_func ll, brent_func dll, brent_func dll2);
         void add_prior(brent_func ll, brent_func dll);
         void add_prior(brent_func ll, brent_func dll, brent_func dll2);
+        void add_normal_prior(double mu, double sigma);
+        void add_normal_prior(double mu, double sigma, double a, double b);
+        void add_beta_prior(double alpha, double beta);
         bool add_data(std::string name, std::vector<double>& data);
         bool add_data(std::string name, std::vector<int>& data);
         bool add_data_fixed(std::string name, double data);
         bool add_data_fixed(std::string name, int data);
+        bool add_weights(std::vector<double>& weights);
         bool add_prior_param(std::string name, double data);
         bool add_prior_param(std::string name, int data);
         void constrain_pos();
@@ -144,6 +166,8 @@ class brentSolver{
         void set_delta(double delt);
         void set_maxiter(int i);
         
+        double log_likelihood;
+
         // Debugging, etc. - print x, log likelihood, deriv log likelihood,
         // and second deriv log likelihood (if possible) over the range
         // with the given step size

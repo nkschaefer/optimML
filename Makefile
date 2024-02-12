@@ -8,11 +8,11 @@ LFLAGS=-L$(PREFIX)/lib
 
 all: lib/liboptimml.so lib/liboptimml.a
 
-lib/liboptimml.so: build/eig.o build/nnls.o build/lstsq.o build/functions.o build/brent.o build/multivar.o build/mixcomp.o
-	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/eig.o build/nnls.o build/lstsq.o build/functions.o build/brent.o build/multivar.o build/mixcomp.o -lstdc++ -llapack
+lib/liboptimml.so: build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
+	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o -lstdc++
 
-lib/liboptimml.a: build/eig.o build/nnls.o build/lstsq.o build/functions.o build/brent.o build/multivar.o build/mixcomp.o
-	ar rcs lib/liboptimml.a build/eig.o build/nnls.o build/lstsq.o build/functions.o build/brent.o build/multivar.o build/mixcomp.o
+lib/liboptimml.a: build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
+	ar rcs lib/liboptimml.a build/functions.o build/brent.o build/multivar.o build/mixcomp.o build/linesearch.o build/stlbfgs.o
 
 build/brent.o: src/brent.cpp src/brent.h src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/brent.cpp -o build/brent.o
@@ -34,6 +34,12 @@ build/lstsq.o: src/lstsq.cpp src/lstsq.h
 
 build/eig.o: src/eig.cpp src/eig.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/eig.cpp -o build/eig.o
+
+build/linesearch.o: src/stlbfgs/linesearch.h src/stlbfgs/linesearch.cpp
+	$(COMP) $(FLAGS) $(IFLAGS) -c src/stlbfgs/linesearch.cpp -o build/linesearch.o
+
+build/stlbfgs.o: src/stlbfgs/stlbfgs.h src/stlbfgs/stlbfgs.cpp
+	$(COMP) $(FLAGS) $(IFLAGS) -c src/stlbfgs/stlbfgs.cpp -o build/stlbfgs.o
 
 clean:
 	rm build/*.o

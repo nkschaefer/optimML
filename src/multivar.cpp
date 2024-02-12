@@ -20,6 +20,7 @@
 #include "functions.h"
 #include "eig.h"
 #include "multivar.h"
+#include "stlbfgs/stlbfgs.h"
 
 using std::cout;
 using std::endl;
@@ -27,23 +28,16 @@ using namespace std;
 
 // ===== multivar =====
 //
-// A multi-variate Newton-Raphson solver designed to maximize the log
-// likelihood of a function with known first and second derivatives. 
+// A class designed to numerically optimize multivariate log likelihood functions
+// using BFGS (through a third party library, stlbfgs).
 //
 // Features that make it useful:
 //
-// Incorporates a slight modification of the backtracking method described
-// in Chapter 9 of Numerical Recipes -- this catches situations where an
-// iteration would jump too far and takes a fraction of the original
-// step instead.
-//
-// Detects, at each step, whether the Hessian is negative-definite. If not,
-// the algorithm is likely proceeding to a minimum instead of a maximum, so
-// Newton steps are taken in the opposite direction (away from the minimum)
-// until the Hessian becomes negative-definite.
-// 
 // Can contrain parameters to (0, infinity) (through log transformation)
 // or (0,1) (through logit transformation) automatically.
+// 
+// Does not (yet) implement box constrants on LBFGS, however. For now,
+// treats the BFGS portion as a black box.
 //
 // Can incorporate a set of parameters to model mixture components. This 
 // applies where a quantity of interest can be observed that is thought 
@@ -133,6 +127,11 @@ void multivar_ml_solver::init(vector<double> params_init, multivar_func ll,
 multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
     multivar_func ll, multivar_func_d dll, multivar_func_d2 dll2){
     init(params_init, ll, dll, dll2);  
+}
+
+multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
+    multivar_func ll, multivar_func_d dll){
+    init(params_init, ll, dll, dummy_d2_func); 
 }
 
 multivar_ml_solver::multivar_ml_solver(){
@@ -246,6 +245,20 @@ bool multivar_ml_solver::add_data_fixed(string name, int dat){
     param_int_cur.insert(make_pair(name, dat));
     return true;
 }
+
+bool multivar_ml_solver::add_weights(std::vector<double>& weights){
+    if (!initialized){
+        fprintf(stderr, "ERROR: not initialized\n");
+        exit(1);
+    }
+    if (n_data > 0 && weights.size() != this->n_data){
+        fprintf(stderr, "ERROR: weight vector not same length as data\n");
+        return false;
+    } 
+    this->weights = weights;
+    return true;
+}
+
 /**
  * This class can also have a mixture of components as one of its variables.
  * A mixture of components is a set of n fractions between 0 and 1, which must
@@ -500,6 +513,11 @@ double multivar_ml_solver::dummy_prior_func(double x, map<string, double>& param
     return 0.0;
 }
 
+void multivar_ml_solver::dummy_d2_func(vector<double>& params, map<string, double>& data_d,
+    map<string, int>& data_i, vector<vector<double> >& results){
+    // Do nothing
+}
+
 double multivar_ml_solver::dll_prior_normal(double x, map<string, double>& params_d,
     map<string, int>& params_i){
     // Truncation no longer matters for derivatives wrt independent variable
@@ -550,7 +568,7 @@ bool multivar_ml_solver::add_normal_prior(int idx, double mu, double sigma){
     return true;
 }
 
-bool multivar_ml_solver::add_truncated_normal_prior(int idx, double mu, double sigma, double a, double b){
+bool multivar_ml_solver::add_normal_prior(int idx, double mu, double sigma, double a, double b){
     if (b <= a){
         fprintf(stderr, "ERROR: lower bound of truncated normal set above upper bound\n");
         return false;
@@ -670,6 +688,9 @@ void multivar_ml_solver::set_maxiter(int m){
     this->maxiter = m;
 }
 
+/**
+ * When something goes wrong in function evaluation, send a message to stderr.
+ */
 void multivar_ml_solver::print_function_error(){
     fprintf(stderr, "parameters:\n");
     for (int i = 0; i < x_t_extern.size(); ++i){
@@ -686,6 +707,10 @@ void multivar_ml_solver::print_function_error(){
     }
 }
 
+/**
+ * When something goes wrong in evaluating a prior function, send a message
+ * to stderr.
+ */
 void multivar_ml_solver::print_function_error_prior(int idx){
     fprintf(stderr, "parameter:\n");
     fprintf(stderr, "%d): %f\n", idx, x_t_extern[idx]);
@@ -701,7 +726,9 @@ void multivar_ml_solver::print_function_error_prior(int idx){
     }
 }
 
-// Evaluate log likelihood at current vector of values
+/**
+ * Evaluate log likelihood at current vector of values
+ */
 double multivar_ml_solver::eval_ll_x(int i){
     double f_x = 0.0;
     if (i >= 0){
@@ -711,6 +738,9 @@ double multivar_ml_solver::eval_ll_x(int i){
             fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
             print_function_error();
             exit(1);
+        }
+        if (this->weights.size() > 0){
+            ll *= this->weights[i];
         }
         f_x += ll;
     }
@@ -735,8 +765,9 @@ parameter %d\n", j);
     return f_x;
 }
 
-
-
+/**
+ * Evaluate the log likelihood function across every current data point.
+ */
 double multivar_ml_solver::eval_ll_all(){
     double loglik = 0.0;
 
@@ -791,10 +822,15 @@ double multivar_ml_solver::eval_ll_all(){
     return loglik;
 }
 
-// Evaluate derivative of log likelihood at current vector; store in 
-// gradient vector.
+/**
+ * Evaluate derivative of log likelihood at current vector; store in 
+ * gradient vector.
+ */
 void multivar_ml_solver::eval_dll_dx(int i){
     if (i >= 0){
+        for (int z = 0; z < n_param_extern; ++z){
+            this->dy_dt_extern[z] = 0.0;
+        }
         dll_dx(x_t_extern, this->param_double_cur, this->param_int_cur, dy_dt_extern);
         for (int j = 0; j < n_param_extern; ++j){
             if (isnan(dy_dt_extern[j]) || isinf(dy_dt_extern[j])){
@@ -802,8 +838,12 @@ void multivar_ml_solver::eval_dll_dx(int i){
                 print_function_error();
                 exit(1);
             }
+            double w = 1.0;
+            if (this->weights.size() > 0){
+                w = this->weights[i];
+            }
             if (nmixcomp > 0 && j == n_param_extern-1){
-                dy_dp = dy_dt_extern[j];
+                dy_dp = dy_dt_extern[j] * w;
             }
             else{
                 dy_dt[j] = dy_dt_extern[j];
@@ -812,7 +852,7 @@ void multivar_ml_solver::eval_dll_dx(int i){
                     dt_dx[j] = 0.0;
                 }
                 else{
-                    G[j] += dy_dt[j] * dt_dx[j];
+                    G[j] += dy_dt[j] * w * dt_dx[j];
                 }
             }
         }
@@ -875,11 +915,19 @@ parameter %d\n", j);
     }
 }
 
-// Evaluate second derivative at current parameter values; store results in
-// Hessian matrix.
+/**
+ * Evaluate second derivative at current parameter values; store results in
+ * Hessian matrix. NOTE: currently not used; LBFGS approximates the Hessian
+ * without explicitly evaluating second derivative
+ */
 void multivar_ml_solver::eval_d2ll_dx2(int i){
 
     if (i >= 0){
+        for (int z = 0; z < n_param_extern; ++z){
+            for (int zz = 0; zz < n_param_extern; ++zz){
+                this->d2y_dt2_extern[z][zz] = 0.0;
+            }
+        }
         d2ll_dx2(x_t_extern, this->param_double_cur, this->param_int_cur, this->d2y_dt2_extern);
         for (int j = 0; j < n_param_extern; ++j){
             for (int k = 0; k < n_param_extern; ++k){
@@ -893,17 +941,22 @@ void multivar_ml_solver::eval_d2ll_dx2(int i){
                 bool j_is_p = nmixcomp > 0 && j == n_param_extern-1;
                 bool k_is_p = nmixcomp > 0 && k == n_param_extern-1;
                 
+                double w = 1.0;
+                if (this->weights.size() > 0){
+                    w = this->weights[i];
+                }
+
                 if (j_is_p && k_is_p){
-                    d2y_dp2 = d2y_dt2_extern[j][k];
+                    d2y_dp2 = d2y_dt2_extern[j][k] * w;
                 }    
                 else if (j_is_p && !x_skip[k]){
-                    d2y_dpdt[k] = d2y_dt2_extern[j][k];
+                    d2y_dpdt[k] = d2y_dt2_extern[j][k] * w;
                 }
                 else if (k_is_p && !x_skip[j]){
-                    d2y_dtdp[k] = d2y_dt2_extern[j][k];
+                    d2y_dtdp[k] = d2y_dt2_extern[j][k] * w;
                 }
                 else if (!x_skip[j] && !x_skip[k]){
-                    H[j][k] += d2y_dt2_extern[j][k] * d2t_dx2[j][k];
+                    H[j][k] += d2y_dt2_extern[j][k] * w * d2t_dx2[j][k];
                 }
             }
 
@@ -1023,6 +1076,135 @@ on parameter %d\n", j);
     }
 }
 
+/**
+ * When solving via BFGS, evaluate functions and deal with variable transformations
+ * and resulting adjustments to derivatives.
+ */
+const void multivar_ml_solver::eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
+    double& f_bfgs, std::vector<double>& g_bfgs){
+    // Ignore the Hessian, but still calculate the gradient.
+    // Zero out stuff
+    for (int i = 0; i < n_param; ++i){
+        // Copy param value back from BFGS solver
+        x[i] = x_bfgs[i];
+        G[i] = 0.0;
+        dy_dt[i] = 0.0;
+        if (i < n_param-nmixcomp){
+            dy_dt_prior[i] = 0.0;
+        }
+        dt_dx[i] = 0.0;
+    }
+    dy_dp = 0.0;
+    for (int i = 0; i < n_param_extern; ++i){
+        dy_dt_extern[i] = 0.0;
+    }
+    if (nmixcomp > 0 && has_prior_mixcomp){
+        for (int i = 0; i < nmixcomp; ++i){
+            dy_dt_mixcomp_prior[i] = 0.0;
+        }
+    }
+
+    // Un-transform variables and compute partial 1st and 2nd derivatives
+    // wrt transformations
+    
+    // Note: 2nd derivatives of transformations of non-mixture component
+    // variables do not depend on other variables, so off diagonal Hessian
+    // entries are zero
+
+    // Handle all non-mixture component variables
+    for (int i = 0; i < n_param-nmixcomp; ++i){
+        if (this->trans_log[i]){
+            if (x[i] < xval_log_min || x[i] > xval_log_max){
+                x_skip[i] = true;
+            } 
+            else{
+                x_skip[i] = false;
+            }
+            x_t[i] = exp(x[i]);
+            dt_dx[i] = x_t[i];
+        }
+        else if (this->trans_logit[i]){
+            if (x[i] < xval_logit_min || x[i] > xval_logit_max){
+                x_skip[i] = true;
+            }
+            else{
+                x_skip[i] = false;
+            }
+            x_t[i] = expit(x[i]);
+            dt_dx[i] = exp(-x[i]) / pow((exp(-x[i]) + 1), 2);
+        }
+        else{
+            if (x[i] < xval_min || x[i] > xval_max){
+                x_skip[i] = true;
+            }
+            else{
+                x_skip[i] = false;
+            }
+            x_t[i] = x[i];
+            dt_dx[i] = 1.0;
+        }
+        x_t_extern[i] = x_t[i];
+    }
+    // Handle all mixture component variables
+    mixcompsum = 0.0;
+
+    for (int i = n_param-nmixcomp; i < n_param; ++i){
+        if (x[i] < xval_logit_min || x[i] > xval_logit_max){
+            x_skip[i] = true;
+        }
+        else{
+            x_skip[i] = false;    
+        }
+        x_t[i] = expit(x[i]);
+        mixcompsum += x_t[i];
+    }
+    for (int i = n_param-nmixcomp; i < n_param; ++i){
+        x_t[i] /= mixcompsum;
+    }
+
+    // Visit each data point
+    double loglik = 0.0;
+    for (int i = 0; i < n_data; ++i){
+        // Update parameter maps that will be sent to functions
+        for (int j = 0; j < this->params_double_names.size(); ++j){
+            *(this->param_double_ptr[j]) = (this->params_double_vals[j][i]);
+        }
+        for (int j = 0; j < this->params_int_names.size(); ++j){
+            *(this->param_int_ptr[j]) = (this->params_int_vals[j][i]);
+        }
+        
+        // Handle p from mixture proportions, if we have mixture proportions
+        // Also pre-calculate mixcompsum_f, a quantity used in derivatives of
+        // transformation of mixture component variables
+        mixcompsum_f = 0.0;
+        if (nmixcomp > 0){
+            double p = 0.0;
+            for (int k = 0; k < nmixcomp; ++k){
+                p += mixcompfracs[i][k] * x_t[n_param-nmixcomp+k];
+                mixcompsum_f += mixcompfracs[i][k] / (exp(-x[k]) + 1);
+            }
+            x_t_extern[x_t_extern.size()-1] = p;
+        }
+        // Evaluate functions
+        loglik += eval_ll_x(i);
+        eval_dll_dx(i);
+    }
+    // Let prior distributions contribute and wrap up calculations
+    // at the end, independent of data
+    loglik += eval_ll_x(-1);
+    eval_dll_dx(-1);
+    
+    // Make everything negative to reflect that we're minimizing instead of maximizing
+    f_bfgs = -loglik;
+    for (int i = 0; i < n_param; ++i){
+        g_bfgs[i] = -G[i];
+    }
+}
+
+/**
+ * Evaluate all functions when solving via a method other than BFGS
+ * (i.e. Newton-Raphson); currently not used.
+ *
 double multivar_ml_solver::eval_funcs(){
     // Zero out stuff
     for (int i = 0; i < n_param; ++i){
@@ -1161,21 +1343,25 @@ double multivar_ml_solver::eval_funcs(){
     loglik += eval_ll_x(-1);
     eval_dll_dx(-1);
     eval_d2ll_dx2(-1);
-    /*
-    for (int j = 0; j < nmixcomp; ++j){
-        if (x[n_param-nmixcomp+j] < -25 || x[n_param-nmixcomp+j] > 25){
-            // It's effectively hit 0 or 1.
-            G[n_param-nmixcomp+j] = 0.0;
-            for (int k = 0; k < n_param; ++k){
-                H[n_param-nmixcomp+j][k] = 0.0;
-                H[k][n_param-nmixcomp+j] = 0.0;
-            }
-        }
-    }
-    */
+    
+    //for (int j = 0; j < nmixcomp; ++j){
+    //    if (x[n_param-nmixcomp+j] < -25 || x[n_param-nmixcomp+j] > 25){
+    //        // It's effectively hit 0 or 1.
+    //        G[n_param-nmixcomp+j] = 0.0;
+    //        for (int k = 0; k < n_param; ++k){
+    //            H[n_param-nmixcomp+j][k] = 0.0;
+    //           H[k][n_param-nmixcomp+j] = 0.0;
+    //        }
+    //    }
+    //}
     return loglik;
 }
+*/
 
+/**
+ * After a solution is found, fill external data structures that user 
+ * can see
+ */
 void multivar_ml_solver::fill_results(double llprev){
     // Store un-transformed results
     for (int j = 0; j < n_param-nmixcomp; ++j){
@@ -1211,7 +1397,8 @@ void multivar_ml_solver::fill_results(double llprev){
  * If not, we assume we are converging toward a local minimum instead of a
  * local maximum and can change direction accordingly.
  *
- */
+ * NOTE: currently removed to eliminate dependency on CBLAS
+ *
 bool multivar_ml_solver::check_negative_definite(){
     vector<double> eig;
     get_eigenvalues(H, eig);
@@ -1224,10 +1411,13 @@ bool multivar_ml_solver::check_negative_definite(){
     }
     return neg_def;
 }
+*/
 
 /**
  * Returns a signal for whether or not to break out of the solve routine.
- */
+ *
+ * NOTE: currently not used; not needed by BFGS
+ *
 bool multivar_ml_solver::backtrack(vector<double>& delta_vec, 
     double& loglik, double& llprev, double& delta){
 
@@ -1289,22 +1479,8 @@ bool multivar_ml_solver::backtrack(vector<double>& delta_vec,
             x[i] = x_orig[i] + lambda_1 * delta_vec[i];
         }
         g_lambda1 = eval_ll_all();
-        /*
-        g_lambda1 = -loglik;
-        for (int i = 0; i < n_param; ++i){
-            g_lambda1 += G[i] * lambda_1 * delta_vec[i];
-        }
-        g_lambda1 = -g_lambda1;
-        */
         fprintf(stderr, "  lambda %f g %f\n", lambda_1, g_lambda1);
-        /*
-        for (int i = 0; i < n_param; ++i){
-            x[i] = x_orig[i] + lambda_1 * delta_vec[i];        
-        }
-        double lltest = eval_ll_all();
-        */
         if (g_lambda1 >= llnew_alt){
-        //if (lltest >= llnew_alt){     
             accept = true;
             lambda = lambda_1;
             break;
@@ -1360,8 +1536,68 @@ bool multivar_ml_solver::backtrack(vector<double>& delta_vec,
     }
     return true;
 }
+*/
 
+/**
+ * Maximize the likelihood function using BFGS (allow stlbfgs library to 
+ * handle this as a black box)
+ */
 bool multivar_ml_solver::solve(){
+    if (n_data == 0){
+        fprintf(stderr, "ERROR: no data added\n");
+        return false;
+    }
+    G.clear();
+    
+    // Initialize data structures to store components of 1st and
+    // 2nd derivatives 
+    dt_dx.clear();
+    dy_dt.clear();
+    dy_dt_prior.clear();
+    this->xmax.clear();
+    
+    for (int i = 0; i < n_param; ++i){
+        // Gradient
+        G.push_back(0.0);
+        
+        // Partial derivatives
+        dy_dt.push_back(1.0);
+        dt_dx.push_back(1.0);
+
+        // Prior derivatives
+        if (i < n_param-nmixcomp){
+            dy_dt_prior.push_back(1.0);
+        }
+        xmax.push_back(0.0);
+    }
+
+    std::function<void(const STLBFGS::vector&, double&, STLBFGS::vector&)> f = 
+        [=](const STLBFGS::vector& a, double& b, STLBFGS::vector& c) {
+        this->eval_funcs_bfgs(a, b, c);
+    };
+    STLBFGS::Optimizer opt{f};
+    opt.verbose = false;
+    //opt.ftol = delta_thresh;
+    //opt.maxiter = maxiter;
+    std::vector<double> xcopy = x;
+    double res = opt.run(xcopy);
+    for (int i = 0; i < n_param; ++i){
+        x[i] = xcopy[i];
+    }
+    double ll = eval_ll_all();
+    fill_results(ll);
+    return true; 
+}
+
+/**
+ * Maximize likelihood by finding roots of gradient function using Newton-Raphson
+ *
+ * NOTE: currently not used, in favor of BFGS, which does not need explicit
+ * 2nd derivative evaluations and so requires fewer parameters, and is much
+ * faster. Also avoids the need for CBLAS (for matrix inversion and computing
+ * eigenvalues to check for negative definiteness). Code kept here for reference.
+ *
+bool multivar_ml_solver::solve_newton(){
     if (!initialized){
         fprintf(stderr, "ERROR: not initialized\n");
         return false;
@@ -1434,7 +1670,6 @@ bool multivar_ml_solver::solve(){
         
         // Compute everything    
         double loglik = eval_funcs();
-        fprintf(stderr, "LL %f -> %f\n", llprev, loglik);
         
         // Store maximum value of log likelihood encountered so far
         // (and associated parameters), in case anything weird happens later
@@ -1509,8 +1744,9 @@ bool multivar_ml_solver::solve(){
                     x[j] += delta_vec[j];
                 }
                 else{
+                    fprintf(stderr, "WARNING: not negative definite. Mirroring Newton step\n");
                     x[j] -= delta_vec[j];
-                } 
+                }
             }
         }
         
@@ -1527,4 +1763,5 @@ bool multivar_ml_solver::solve(){
     fprintf(stderr, "%d of %d iterations\n", nits, maxiter);
     return true;
 }
+*/
 
