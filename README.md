@@ -5,12 +5,13 @@ A fast and flexible C++ library for numeric optimization of complex log likeliho
 This library was designed to make it easy to find maximum likelihood estimates (MLE) or maximum a posteriori estimates (MAP), given arbitrary complex log likelihood functions to be evaluated on a data set consisting of many observations. It includes classes designed to:
 * Maximize univariate log likelihood functions by finding a root of the derivative within a fixed interval (using Brent's method)
   * Can optionally estimate the standard error of the MLE/MAP estimate using the Fisher information, if a function for evaluating the second derivative is provided
-  * Relevant class: brentSolver
+  * Relevant class: `brentSolver`
 * Maximize univariate log likelihood functions (or any other function) within a fixed interval without derivative information, using golden section search
-   * Relevant class: golden_solver
+   * Relevant class: `golden_solver`
 * Maximize multivariate log likelihood functions, given initial parameter guesses, using BFGS
-   * Relevant class: multivar_ml_solver
-   * Helper class to simplify solving mixture proportion problems (see below): mixcomp_solver
+   * Relevant class: `multivar_ml_solver`
+   * Helper class to simplify solving mixture proportion problems (see below): `mixcomp_solver`
+     
 Some nice features it has are:
 * The ability to add data points as named vectors, which can be accessed by outside functions and looked up by name
 * The ability to add some pre-set prior distributions to calculations
@@ -28,6 +29,15 @@ For any given allele, you know the expected allele frequency in population 1, 2,
 
 You want to solve for the mixture components $m_1$, $m_2$, and $m_3$, where each denotes the proportion of the pool made up of individuals from each population, and $$\sum_{j=1}^{3}(m_j) = 1$$
 
-To handle the requirement that for each $m_j$, $0 < m_j < 1$, and that all must sum to 1, each variable is logit transformed, and each appears in the log likelihood function as follows: $t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum_{k=1}^n \frac{1}{e^{-m_k} + 1}}$
+To handle the requirement that for each $m_j$, $0 < m_j < 1$, and that all must sum to 1, each variable is logit transformed, and each appears in the log likelihood function as follows: $$t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum_{k=1}^n \frac{1}{e^{-m_k} + 1}}$$
+
+`multivar_ml_solver` handles all this behind the scenes and exposes a single variable $$p_i = \sum_{j=1}^3 f_{ij}m_j $$ to the functions the user provided to evaluate the log likelihood and its gradient. In this case, the user would need to compare the value of $p_i$ at each function evaluation to the measured frequency of allele $i$ $A_i$. If the user has collected a reference allele count $r_i$ and alt allele count $a_i$ for each allele $i$, for example, this could be done by computing the binomial log likelihood of $a_i$ successes in $r_i + a_i$ draws with the parameter $p_i$.
+
+`multivar_ml_solver` allows users to set up mixture component problems with an arbitrary number of other data values, and to incorporate these however is desired in the supplied log likelihood and gradient functions (although only one set of mixture components is currently allowed).
+
+If a simpler interface is desired, and the user only needs to solve for a set of mixture components given some data (as above), the class `mixcomp_solver` is provided. This class has some pre-set ways of relating $p_i$ to data: via least squares, the normal distribution, the beta distribution, or the binomial distribution (as above).
+
+Both classes also allow the initial guesses of mixture components to start as an even pool of all possible individuals, an already-known vector of mixture proportions, or to randomly shuffle mixture components. The user can also provide a Dirichlet prior on mixture components, and if provided, random shuffling will use the Dirichlet concentration parameter for each mixture component.
+
 ## Requirements
 Only requires a C++11 compiler. Also depends on the [stlbfgs](https://github.com/nkschaefer/stlbfgs) library, which is included as a submodule. The original repository is [here](https://github.com/ultimaille/stlbfgs), and the forked version was modified to be compatible with older compilers. 
