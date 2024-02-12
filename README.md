@@ -5,13 +5,16 @@ A fast and flexible C++ library for numeric optimization of complex log likeliho
 This library was designed to make it easy to find maximum likelihood estimates (MLE) or maximum a posteriori estimates (MAP), given arbitrary complex log likelihood functions to be evaluated on a data set consisting of many observations. It includes classes designed to:
 * Maximize univariate log likelihood functions by finding a root of the derivative within a fixed interval (using Brent's method)
   * Can optionally estimate the standard error of the MLE/MAP estimate using the Fisher information, if a function for evaluating the second derivative is provided
+  * Relevant class: brentSolver
 * Maximize univariate log likelihood functions (or any other function) within a fixed interval without derivative information, using golden section search
+   * Relevant class: golden_solver
 * Maximize multivariate log likelihood functions, given initial parameter guesses, using BFGS
-  
+   * Relevant class: multivar_ml_solver
+   * Helper class to simplify solving mixture proportion problems (see below): mixcomp_solver
 Some nice features it has are:
 * The ability to add data points as named vectors, which can be accessed by outside functions and looked up by name
 * The ability to add some pre-set prior distributions to calculations
-* The ability to constrain variables to (0, infinity] by log transformation or (0,1) by logit transformation automatically
+* The ability to constrain variables to $(0, \infty]$ by log transformation or $(0,1)$ by logit transformation automatically
   * Automatically handles these transformations and makes the gradient depend on the un-transformed versions of the variables
 * The ability to model mixture proportions (see below)
 ## Mixture proportions
@@ -23,7 +26,7 @@ You are interested in modeling your data as coming from a mixture of three popul
 
 For any given allele, you know the expected allele frequency in population 1, 2, and 3: $f_{i1} = E[A_i | P_1], f_{i2} = E[A_i | P_2], f_{i3} = E[A_i | P_3]$
 
-You want to solve for the mixture components $m_1$, $m_2$, and $m_3$, where each denotes the proportion of the pool made up of individuals from each population, and $\sum_{j=1}^{3}(m_j) = 1$
+You want to solve for the mixture components $m_1$, $m_2$, and $m_3$, where each denotes the proportion of the pool made up of individuals from each population, and $$\sum_{j=1}^{3}(m_j) = 1$$
 
 To handle the requirement that for each $m_j$, $0 < m_j < 1$, and that all must sum to 1, each variable is logit transformed, and each appears in the log likelihood function as follows: $t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum_{k=1}^n \frac{1}{e^{-m_k} + 1}}$
 ## Requirements
