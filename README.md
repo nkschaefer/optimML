@@ -19,7 +19,7 @@ This library was designed to make it easy to find maximum likelihood estimates (
 * After instantiating an object with the necessary functions, the user can add data points as named vectors.
    * In other words, if the user has collected $n$ pieces of data, where each is a vector of multiple values, the user creates an $n$-value vector for each type of observation.
    * Solvers can handle/store both integer and double observations, and each observation is mapped to a name the user provides.
-   * If there are 10 rows of data, each with an integer measurement called "count1," another called "count2," and a decimal measurement called "intensity," the user would add a 10-value vector of ints named "count1," a 10-value vector of ints named "count2," and a 10-value vector of doubles named "intensity." Then, in the functions they provided, each value can be accessed by name.
+   * If there are 10 rows of data, each with an integer measurement called `count1`, another called `count2`, and a decimal measurement called `intensity`, the user would add a `std::vector<int>(10)` named `count1`, a `std::vector<int>(10)` named `count2`, and a `std::vector<double>(10)` named "intensity." Then, in the functions they provided, each value can be accessed by name.
    * Functions are evaluated once at each data point, so the provided functions do not need to consider vectors of data.
 
 #### Prior distributions
