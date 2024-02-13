@@ -80,7 +80,7 @@ To accomodate these constraints, each variable is logit transformed and divided 
 If a simpler interface is desired, and the user only needs to solve for a set of mixture components given some data (as in this example), the class `mixcomp_solver` is provided. This class has some pre-set ways of relating $p_i$ to data: via least squares, the normal distribution, the beta distribution, or the binomial distribution (as above).
 
 #### Use of a prior
-The only tenable prior distribution for mixture components is a Dirichlet distribution, which provides a concentration parameter for each mixture component (similar in concept to the alpha and beta parameters of the Beta distribution) Draws from this Dirichlet distribution are then vectors of mixture proportions. `multivar_ml_solver` and its wrapper class `mixcomp_solver` allow users to specify a Dirichlet prior on mixture components. 
+The only tenable prior distribution for mixture components is a Dirichlet distribution, which provides a concentration parameter for each mixture component (similar in concept to the $\alpha$ and $\beta$ parameters of the Beta distribution) Draws from this Dirichlet distribution are then vectors of mixture proportions. `multivar_ml_solver` and its wrapper class `mixcomp_solver` allow users to specify a Dirichlet prior on mixture components. 
 
 #### Initial guesses
 These are difficult situations to model, and the maximum likelihood estimate provided is likely to be influenced by the initial guess of mixture components. By default, mixture components are intialized to $1/n$, where $n$ is the number of components in the model. Users can also provide a vector of initial guesses, if they have pre-existing information about the probable values of the mixture components.
