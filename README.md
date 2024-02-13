@@ -18,6 +18,21 @@ Some features:
 * The ability to constrain variables to $(0, \infty]$ by log transformation or $(0,1)$ by logit transformation automatically
   * Automatically handles these transformations and makes the gradient depend on the un-transformed versions of the variables
 * The ability to model mixture proportions (see below)
+
+## Variable transformations
+
+### Constraining to $[0,\infty)$
+
+Constraining a variable to $[0, \infty)$ can be accomplished through log transformation (and handled automatically by class functions). In this case, any given variable $x_j$ will be stored as $x_j = log(g_j)$, where $g_j$ is the initial guess for $x_j$. Then, the input to the log likelihood function and its gradient are the back-transformed version of each $x_j$ constrained this way: $t(x_j) = e^{x_j}$. 
+
+## Constraining to $[0,1]$
+
+Constraining a variable to $[0,1]$ can be accomplished through logit transformation (and handled automatically by class functions). In this case, any given variable $x_j$ will be stored as $x_j = log(\frac{g_j}{1-g_j})$, where $g_j$ is the initial guess for $x_j$. Then, the input to the log likelihood function and its gradient are the back-transformed version of each $x_j$ constrained this way: $t(x_j) = \frac{1}{e^{-x_j} + 1}$.
+
+## Constraining a set of variables to $[0,1]$ and ensuring that they sum t 1
+
+This case is designed to model mixture proportions. See next section.
+
 ## Mixture proportions
 There are some special cases where you have collected observations that are thought to result from a mixture (in unknown proportions) of components, each contributing a known expected value to the result. For example, suppose you have sequenced a pool of individuals thought to belong to three populations, and you want to know what percent of the pool is made up of individuals of each population. 
 
@@ -44,9 +59,9 @@ To accomodate these constraints, each variable is logit transformed and divided 
 
 `multivar_ml_solver` allows users to set up mixture component problems with an arbitrary number of other data values, and to incorporate these however is desired in the supplied log likelihood and gradient functions (although only one set of mixture components is currently allowed).
 
-If a simpler interface is desired, and the user only needs to solve for a set of mixture components given some data (as above), the class `mixcomp_solver` is provided. This class has some pre-set ways of relating $p_i$ to data: via least squares, the normal distribution, the beta distribution, or the binomial distribution (as above).
+If a simpler interface is desired, and the user only needs to solve for a set of mixture components given some data (as in this example), the class `mixcomp_solver` is provided. This class has some pre-set ways of relating $p_i$ to data: via least squares, the normal distribution, the beta distribution, or the binomial distribution (as above).
 
-Both classes also allow the initial guesses of mixture components to start as an even pool of all possible individuals, an already-known vector of mixture proportions, or to randomly shuffle mixture components. The user can also provide a Dirichlet prior on mixture components, and if provided, random shuffling will use the Dirichlet concentration parameter for each mixture component.
+Both classes also allow the initial guesses of mixture components to start as an even pool of all possible individuals, a user-supplied vector of initial guesses of mixture proportions, or to randomly shuffle mixture components. The user can also provide a Dirichlet prior on mixture components, and if provided, random shuffling will use the Dirichlet concentration parameter for each mixture component.
 
 ## Requirements
 Only requires a C++11 compiler. Also depends on the [stlbfgs](https://github.com/nkschaefer/stlbfgs) library, which is included as a submodule. The original repository is [here](https://github.com/ultimaille/stlbfgs), and the forked version was modified to be compatible with older compilers. 
