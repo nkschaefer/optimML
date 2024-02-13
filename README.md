@@ -23,11 +23,11 @@ Some features:
 
 #### Constraining to $[0,\infty)$
 
-Constraining a variable to $[0, \infty)$ can be accomplished through log transformation (and handled automatically by class functions). In this case, any given variable $x_j$ will be stored as $x_j = log(g_j)$, where $g_j$ is the initial guess for $x_j$. Then, the input to the log likelihood function and its gradient are the back-transformed version of each $x_j$ constrained this way: $t(x_j) = e^{x_j}$. 
+Constraining a variable to $[0, \infty)$ can be accomplished through log transformation (and handled automatically by class functions). In this case, any given variable $x_j$ will be stored as $x_j = log(g_j)$, where $g_j$ is the initial guess for $x_j$. Then, the input to the log likelihood function and its gradient are the back-transformed version of each $x_j$ constrained this way: $t(x_j) = e^{x_j}$. The user only needs to deal with the back-transformed values $t(x)$ in the provided log likelihood and gradient functions; transformation is handled behind the scenes.
 
 #### Constraining to $[0,1]$
 
-Constraining a variable to $[0,1]$ can be accomplished through logit transformation (and handled automatically by class functions). In this case, any given variable $x_j$ will be stored as $x_j = log(\frac{g_j}{1-g_j})$, where $g_j$ is the initial guess for $x_j$. Then, the input to the log likelihood function and its gradient are the back-transformed version of each $x_j$ constrained this way: $t(x_j) = \frac{1}{e^{-x_j} + 1}$.
+Constraining a variable to $[0,1]$ can be accomplished through logit transformation (and handled automatically by class functions). In this case, any given variable $x_j$ will be stored as $x_j = log(\frac{g_j}{1-g_j})$, where $g_j$ is the initial guess for $x_j$. Then, the input to the log likelihood function and its gradient are the back-transformed version of each $x_j$ constrained this way: $t(x_j) = \frac{1}{e^{-x_j} + 1}$. The user only needs to deal with the back-transformed values $t(x)$ in the provided log likelihood and gradient functions; transformation is handled behind the scenes.
 
 #### Constraining a set of variables to $[0,1]$ and ensuring that they sum to 1
 
