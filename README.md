@@ -13,11 +13,12 @@ This library was designed to make it easy to find maximum likelihood estimates (
    * Helper class to simplify solving mixture proportion problems (see below): `mixcomp_solver`
      
 Some features:
-* The ability to add data points as named vectors, which can be accessed by outside functions and looked up by name
-* The ability to add some pre-set prior distributions to calculations
-* The ability to constrain variables to $(0, \infty]$ by log transformation or $(0,1)$ by logit transformation automatically
-  * Automatically handles these transformations and makes the gradient depend on the un-transformed versions of the variables
-* The ability to model mixture proportions (see below)
+* Solvers are classes. After instantiating an object with the necessary functions (to evaluate log likelihood and/or its first and/or second derivatives), the user can add data points as named vectors. In other words, if the user has collected $n$ pieces of data, where each is a vector of multiple values, the user can add these data to the solver, with each measurement type as a named vector. If there are 10 rows of data, each with an integer measurement called "count1," another called "count2," and a decimal measurement called "intensity," the user would add a 10-value vector of ints named "count1," a 10-value vector of ints named "count2," and a 10-value vector of doubles named "intensity." Then, in the functions they provided, each value can be accessed by name.
+* Prior distributions on variables can be specified, and the solver will then find maximum a posteriori (MAP) estimates of each variable instead of maximum likelihood estimates (MLE).
+* Some convenient pre-set prior distributions are provided for which the user does not need to provide log likelihood functions and their derivatives with respect to the independent variable (currently included: Normal, truncated Normal, Beta, and Binomial)
+* Observations/data points can have weights. The solver then computes weighted maximum likelihood instead of standard maximum likelihood.
+* The solver can constrain variables to $(0, \infty]$ by log transformation or $(0,1)$ by logit transformation automatically (see below).
+* The solver can treat a set of unknown variables as mixture proportions that must sum to 1 (see below).
 
 ## Variable transformations
 
