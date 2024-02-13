@@ -14,7 +14,7 @@ This library was designed to make it easy to find maximum likelihood estimates (
      
 ## Some features
 
-#### Solvers are classes.
+#### General organization
 * Users create solver objects and point them to the necessary user-provided functions. These functions must evaluate the log likelihood given a variable (univariate solvers) or a vector of variables (multivariate solver) and one or more pieces of observed data. Some solvers also require functions to evaluate the first and/or second derivative of the log likelihood function.
 * After instantiating an object with the necessary functions, the user can add data points as named vectors.
    * In other words, if the user has collected $n$ pieces of data, where each is a vector of multiple values, the user creates an $n$-value vector for each type of observation.
