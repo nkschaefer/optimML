@@ -12,11 +12,25 @@ This library was designed to make it easy to find maximum likelihood estimates (
    * Relevant class: `multivar_ml_solver`
    * Helper class to simplify solving mixture proportion problems (see below): `mixcomp_solver`
      
-Some features:
-* Solvers are classes. After instantiating an object with the necessary functions (to evaluate log likelihood and/or its first and/or second derivatives), the user can add data points as named vectors. In other words, if the user has collected $n$ pieces of data, where each is a vector of multiple values, the user can add these data to the solver, with each measurement type as a named vector. If there are 10 rows of data, each with an integer measurement called "count1," another called "count2," and a decimal measurement called "intensity," the user would add a 10-value vector of ints named "count1," a 10-value vector of ints named "count2," and a 10-value vector of doubles named "intensity." Then, in the functions they provided, each value can be accessed by name.
-* Prior distributions on variables can be specified, and the solver will then find maximum a posteriori (MAP) estimates of each variable instead of maximum likelihood estimates (MLE).
-* Some convenient pre-set prior distributions are provided for which the user does not need to provide log likelihood functions and their derivatives with respect to the independent variable (currently included: Normal, truncated Normal, Beta, and Binomial)
-* Observations/data points can have weights. The solver then computes weighted maximum likelihood instead of standard maximum likelihood.
+## Some features
+
+#### Solvers are classes.
+* Users create solver objects and point them to the necessary user-provided functions. These functions must evaluate the log likelihood given a variable (univariate solvers) or a vector of variables (multivariate solver) and one or more pieces of observed data. Some solvers also require functions to evaluate the first and/or second derivative of the log likelihood function.
+* After instantiating an object with the necessary functions, the user can add data points as named vectors.
+   * In other words, if the user has collected $n$ pieces of data, where each is a vector of multiple values, the user creates an $n$-value vector for each type of observation.
+   * Solvers can handle/store both integer and double observations, and each observation is mapped to a name the user provides.
+   * If there are 10 rows of data, each with an integer measurement called "count1," another called "count2," and a decimal measurement called "intensity," the user would add a 10-value vector of ints named "count1," a 10-value vector of ints named "count2," and a 10-value vector of doubles named "intensity." Then, in the functions they provided, each value can be accessed by name.
+   * Functions are evaluated once at each data point, so the provided functions do not need to consider vectors of data.
+
+#### Prior distributions
+* Convenient methods are provided to add a prior distribution on one or more independent variables. This will result in maximum a posteriori (MAP) estimates being computed for each independent variable, rather than maximum likelihood estimates (MLEs).
+   * To specify an arbitrary prior distribution, the user must provide a function to compute its log likelihood and its derivative (and its second derivative, if using Brent's method and the standard error of the estimate is desired)
+* Some pre-set prior distributions are provided for which the user does not need to provide any functions (currently included: Normal, truncated Normal, Beta, and Binomial)
+
+#### Weighted observations
+* Observations/data points can have weights (provided as a vector of doubles). The solver then computes weighted maximum likelihood instead of standard maximum likelihood.
+
+#### Variable constraints
 * The solver can constrain variables to $(0, \infty]$ by log transformation or $(0,1)$ by logit transformation automatically (see below).
 * The solver can treat a set of unknown variables as mixture proportions that must sum to 1 (see below).
 
