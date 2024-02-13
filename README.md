@@ -49,6 +49,8 @@ Constraining a variable to $(0,1)$ can be accomplished through logit transformat
 This case is designed to model mixture proportions. See next section.
 
 ## Mixture proportions
+
+#### Problem definition
 There are some special cases where you have collected observations that are thought to result from a mixture (in unknown proportions) of components, each contributing a known expected value to the result. For example, suppose you have sequenced a pool of individuals thought to belong to three populations, and you want to know what percent of the pool is made up of individuals of each population. 
 
 Your data consist of a series of $n$ allele frequencies measured at different alleles: $A = A_1, A_2, A_3 ... A_n$
@@ -72,11 +74,18 @@ To accomodate these constraints, each variable is logit transformed and divided 
 
 `multivar_ml_solver` handles all this behind the scenes and exposes a single variable $p_i = \sum\limits_{j=1}^3 f_{ij}t(m_j)$ to the functions the user provided to evaluate the log likelihood and its gradient. This means that the user does not need to worry about the transformation, but only needs to provide the number of mixture components in the model and their expected contributions to the result, the $f_i$ vector, for every observation/data point $A_i$. In this example, the user would need to compare the value of $p_i$ at each function evaluation to the measured frequency of allele $i$ $A_i$. If the user has collected a reference allele count $r_i$ and alt allele count $a_i$ for each allele $i$, for example, this could be done by computing the binomial log likelihood of $a_i$ successes in $r_i + a_i$ draws with the parameter $p_i$.
 
+#### Implementation details
 `multivar_ml_solver` allows users to set up mixture component problems with an arbitrary number of other data values, and to incorporate these however is desired in the supplied log likelihood and gradient functions (although only one set of mixture components is currently allowed).
 
 If a simpler interface is desired, and the user only needs to solve for a set of mixture components given some data (as in this example), the class `mixcomp_solver` is provided. This class has some pre-set ways of relating $p_i$ to data: via least squares, the normal distribution, the beta distribution, or the binomial distribution (as above).
 
-Both classes also allow the initial guesses of mixture components to start as an even pool of all possible individuals, a user-supplied vector of initial guesses of mixture proportions, or to randomly shuffle mixture components. The user can also provide a Dirichlet prior on mixture components, and if provided, random shuffling will use the Dirichlet concentration parameter for each mixture component.
+#### Use of a prior
+The only tenable prior distribution for mixture components is a Dirichlet distribution, which provides a concentration parameter for each mixture component (similar in concept to the alpha and beta parameters of the Beta distribution) Draws from this Dirichlet distribution are then vectors of mixture proportions. `multivar_ml_solver` and its wrapper class `mixcomp_solver` allow users to specify a Dirichlet prior on mixture components. 
+
+#### Initial guesses
+These are difficult situations to model, and the maximum likelihood estimate provided is likely to be influenced by the initial guess of mixture components. By default, mixture components are intialized to $1/n$, where $n$ is the number of components in the model. Users can also provide a vector of initial guesses, if they have pre-existing information about the probable values of the mixture components.
+
+To better explore the parameter space, `multivar_ml_solver` and `mixcomp_solver` also provide methods to randomly shuffle mixture components. If a Dirichlet prior has been specified, mixture components are randomly sampled from the prior distribution. One recommended strategy for getting a reasonable idea of the global MLE of mixture parameters would be to start at an even pool of mixture proportions and solve, then store the result and its log likelihood. Then, for some number of random trials $n$, randomly shuffle the mixture components and try again, again storing the result and its log likelihood. When this is done, choose the set of parameters with the highest log likelihood across all random trials.
 
 ## Requirements
 Only requires a C++11 compiler. Also depends on the [stlbfgs](https://github.com/nkschaefer/stlbfgs) library, which is included as a submodule. The original repository is [here](https://github.com/ultimaille/stlbfgs), and the forked version was modified to be compatible with older compilers. 
