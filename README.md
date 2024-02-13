@@ -8,7 +8,7 @@ This library was designed to make it easy to find maximum likelihood estimates (
   * Relevant class: `brentSolver`
 * Maximize univariate log likelihood functions (or any other function) within a fixed interval without derivative information, using golden section search
    * Relevant class: `golden_solver`
-* Maximize multivariate log likelihood functions, given initial parameter guesses, using BFGS
+* Maximize multivariate log likelihood functions, with the ability to compute the first derivative and given initial parameter guesses, using BFGS
    * Relevant class: `multivar_ml_solver`
    * Helper class to simplify solving mixture proportion problems (see below): `mixcomp_solver`
      
