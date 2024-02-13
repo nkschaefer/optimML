@@ -38,7 +38,7 @@ $$
 \end{aligned}
 $$
 
-To accomodate these constraints, each variable is logit transformed and divided by the sum of all mixture component variables. In other words, if the initial guess for a given mixture component variable $m_j$ is $g_j$, then each $m_j$ is initialized to $m_j = \frac{1}{e^{-g_j'} + 1}$, where $g_j' = \frac{g_j}{\sum\limits_{k=1}^3 g_k}.$ each mixture component variable $m_j$ is  in the log likelihood function as follows: $$t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum\limits_{k=1}^n \frac{1}{e^{-m_k} + 1}}$$
+To accomodate these constraints, each variable is logit transformed and divided by the sum of all mixture component variables. In other words, if the initial guess for a given mixture component variable $m_j$ is $g_j$, then each $m_j$ is initialized to $m_j = log(\frac{g_j'}{1 - g_j'})$, where $g_j' = \frac{g_j}{\sum\limits_{k=1}^3 g_k}.$ The log likelihood function and its gradient then consider the back-transformed version of each $m_j$, $$t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum\limits_{k=1}^n \frac{1}{e^{-m_k} + 1}}$$
 
 `multivar_ml_solver` handles all this behind the scenes and exposes a single variable $p_i = \sum\limits_{j=1}^3 f_{ij}m_j$ to the functions the user provided to evaluate the log likelihood and its gradient. In this case, the user would need to compare the value of $p_i$ at each function evaluation to the measured frequency of allele $i$ $A_i$. If the user has collected a reference allele count $r_i$ and alt allele count $a_i$ for each allele $i$, for example, this could be done by computing the binomial log likelihood of $a_i$ successes in $r_i + a_i$ draws with the parameter $p_i$.
 
