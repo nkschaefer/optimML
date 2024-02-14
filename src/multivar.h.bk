@@ -1,0 +1,137 @@
+#ifndef _OPTIMML_MULTIVAR_H
+#define _OPTIMML_MULTIVAR_H
+#include <string>
+#include <algorithm>
+#include <vector>
+#include <iterator>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <functional>
+#include <fstream>
+#include <sstream>
+#include <map>
+#include <unordered_map>
+#include <set>
+#include <cstdlib>
+#include <utility>
+#include <math.h>
+#include "solver.h"
+
+namespace optimML{
+    
+    // Generalized function for use with multi-variate solvers 
+    //
+    // Arguments:
+    //  parameter of independent variables at which to evaluate function
+    //  map of param name -> value for double params
+    //  map of param name -> value for int params
+
+    typedef std::function< double ( std::vector<double>&,
+        std::map<std::string, double >&,
+        std::map<std::string, int>& ) > multivar_func;
+
+    // Function for evaluating gradient
+
+    typedef std::function< void ( std::vector<double>&,
+        std::map<std::string, double>&,
+        std::map<std::string, int>&,
+        std::vector<double>& ) > multivar_func_d;
+
+    // Function for evaluating second derivative (currently not used)
+
+    typedef std::function< void ( std::vector<double>&,
+        std::map<std::string, double>&,
+        std::map<std::string, int>&,
+        std::vector<std::vector<double> >& ) > multivar_func_d2;
+
+
+    class multivar: public solver{
+        protected:
+            
+            // How many variables in x?
+            int n_param;
+                    
+            // Current values of independent variables
+            std::vector<double> x;
+            
+            // Current values of transformed independent variables
+            std::vector<double> x_t;
+            
+            // Current values of derivative of transformation function wrt x
+            std::vector<double> dt_dx;
+            
+            // Current values of second derivative of transformation wrt x
+            std::vector<std::vector<double> > d2t_dx2;
+
+            // Current values of first derivative of log likelihood wrt transformed x
+            std::vector<double> dy_dt;
+            
+            // Current values of second derivative of log likelihood wrt transformed x
+            std::vector<std::vector<double> > d2y_dt2;
+
+            // Current values of first derivatives of prior distributions wrt transformed x
+            std::vector<double> dy_dt_prior;
+            
+            // Current values of second derivatives of prior distributions wrt transformed x
+            // (no off-diagonal terms here)
+            std::veector<double> d2y_dt2_prior;
+
+            // How do we compute log likelihood?
+            multivar_func ll_x;
+            
+            // How do we compute derivative of log likelihood?
+            multivar_func_d dll_dx;
+            
+            // How do we compute the second derivative of log likelihood?
+            multivar_func_d2 d2ll_dx2;
+
+            std::vector<bool> has_prior;
+
+            // Should the independent variables be constrained to positive numbers?
+            std::vector<bool> trans_log;
+            
+            // Should the independent variables be constrained to (0,1)?
+            std::vector<bool> trans_logit;
+            
+            // Print error messages when something goes wrong in an external
+            // function call
+            void print_function_error();
+            void print_function_error_prior();
+            
+            // Gradient
+            std::vector<double> G;
+            
+            // Hessian
+            std::vector<std::vector<double> > H;
+                     
+            const void eval_funcs_bfgs(const std::vector<double>& x, 
+                double& y, std::vector<double>& grad);
+                        
+            double eval_ll_all();
+            
+        public:
+            
+            void init(std::vector<double> params_init, multivar_func ll, 
+                multivar_func_d dll, multivar_func_d2 d2ll);
+            
+            void init(std::vector<double> params_init, multivar_func ll,
+                multivar_func_d dll);
+                    
+            multivar();
+    
+            bool add_prior(int idx, prior_func ll, prior_func dll, 
+                prior_func dll2);
+            
+            bool set_param(int idx, double val);
+   
+            bool solve();
+
+            // Result
+            std::vector<double> results;
+            std::vector<double> se;    
+    };
+}
+
+#endif
