@@ -5,7 +5,7 @@ A fast and flexible C++ library for numeric optimization of complex log likeliho
 This library was designed to make it easy to find maximum likelihood estimates (MLE) or maximum a posteriori estimates (MAP), given arbitrary complex log likelihood functions to be evaluated on a data set consisting of many observations. It includes classes designed to:
 * Maximize univariate log likelihood functions by finding a root of the derivative within a fixed interval (using Brent's method)
   * Can optionally estimate the standard error of the MLE/MAP estimate using the Fisher information, if a function for evaluating the second derivative is provided
-  * Relevant class: `brentSolver`
+  * Relevant class: `brent_solver`
 * Maximize univariate log likelihood functions (or any other function) within a fixed interval without derivative information, using golden section search
    * Relevant class: `golden_solver`
 * Maximize multivariate log likelihood functions, with the ability to compute the first derivative and given initial parameter guesses, using BFGS
