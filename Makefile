@@ -8,11 +8,11 @@ LFLAGS=-L$(PREFIX)/lib
 STLBFGS_O=build/linesearch.o build/stlbfgs.o
 all: lib/liboptimml.so lib/liboptimml.a
 
-lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o $(STLBFGS_O)
-	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o $(STLBFGS_O) -lstdc++
+lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
+	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O) -lstdc++
 
-lib/liboptimml.a: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o $(STLBFGS_O)
-	ar rcs lib/liboptimml.a build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o $(STLBFGS_O)
+lib/liboptimml.a: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
+	ar rcs lib/liboptimml.a build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
 
 build/solver.o: src/solver.cpp src/solver.h src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/solver.cpp -o build/solver.o
@@ -34,6 +34,9 @@ build/multivar_ml.o: src/multivar_ml.cpp src/multivar.h
 
 build/mixcomp.o: src/mixcomp.cpp src/mixcomp.h src/multivar_ml.h src/multivar.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/mixcomp.cpp -o build/mixcomp.o
+
+build/multivar_sys.o: src/multivar_sys.cpp src/multivar_ml.h
+	$(COMP) $(FLAGS) $(IFLAGS) -c src/multivar_sys.cpp -o build/multivar_sys.o
 
 build/functions.o: src/functions.cpp src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/functions.cpp -o build/functions.o

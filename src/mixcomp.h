@@ -41,57 +41,57 @@ namespace optimML{
             
             // --- Least squares ---
             // Cost function / log likelihood like (negative sum of squares)
-            static double y_ls(std::vector<double>& params, 
+            static double y_ls(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i);
             // First derivative
-            static void dy_dx_ls(std::vector<double>& params, 
+            static void dy_dx_ls(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<double>& results);
             // Second derivative
-            static void d2y_dx2_ls(std::vector<double>& params, 
+            static void d2y_dx2_ls(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
             
             // --- Normal ---
             // Log likelihood function
-            static double y_norm(std::vector<double>& params, 
+            static double y_norm(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i);
             // First derivative
-            static void dy_dx_norm(std::vector<double>& params, 
+            static void dy_dx_norm(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<double>& results);
             // Second derivative
-            static void d2y_dx2_norm(std::vector<double>& params, 
+            static void d2y_dx2_norm(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
 
             // --- Beta ---
             // Log likelihood function
-            static double y_beta(std::vector<double>& params, 
+            static double y_beta(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i);
             // First derivative
-            static void dy_dx_beta(std::vector<double>& params, 
+            static void dy_dx_beta(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<double>& results);
             // Second derivative
-            static void d2y_dx2_beta(std::vector<double>& params, 
+            static void d2y_dx2_beta(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
 
             // --- Binomial ---
             // Log likelihood function
-            static double y_binom(std::vector<double>& params, 
+            static double y_binom(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i);
             // First derivative
-            static void dy_dx_binom(std::vector<double>& params, 
+            static void dy_dx_binom(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<double>& results);
             // Second derivative
-            static void d2y_dx2_binom(std::vector<double>& params, 
+            static void d2y_dx2_binom(const std::vector<double>& params, 
                 const std::map<std::string, double>& data_d,
                 const std::map<std::string, int>& data_i, std::vector<std::vector<double> >& results);
 

@@ -29,7 +29,7 @@ using namespace std;
 
 namespace optimML{
     
-    void multivar::dummy_d2_func(vector<double>& params,
+    void multivar::dummy_d2_func(const vector<double>& params,
         const map<string, double>& params_d, const map<string, int>& params_i, 
         vector<vector<double> >& results){
         // Do nothing
@@ -89,7 +89,9 @@ namespace optimML{
     void multivar::init(vector<double> params_init, multivar_func ll,
         multivar_func_d dll, multivar_func_d2 dll2){
         
-        init_params(params_init);
+        if (!initialized){
+            init_params(params_init);
+        }
         ll_x = ll;
         dll_dx = dll;
         d2ll_dx2 = dll2;
@@ -100,7 +102,9 @@ namespace optimML{
     void multivar::init(vector<double> params_init, multivar_func ll,
         multivar_func_d dll){
         
-        init_params(params_init);
+        if (!initialized){
+            init_params(params_init);
+        }
         ll_x = ll;
         dll_dx = dll;
         d2ll_dx2 = dummy_d2_func;

@@ -24,22 +24,22 @@ namespace optimML{
     // Generalized function representing multivariate log likelihood
     // functions.
 
-    typedef std::function< double ( std::vector<double>&,
+    typedef std::function< double ( const std::vector<double>&,
         const std::map<std::string, double >&,
         const std::map<std::string, int>& ) > multivar_func;
 
-    // Same as above, but also index into parameter vector for variable
-    // whose first derivative is being evaluated
+    // Derivative of above - modifies last parameter to contain gradient
+    // values instead of returning a single value
 
-    typedef std::function< void ( std::vector<double>&,
+    typedef std::function< void ( const std::vector<double>&,
         const std::map<std::string, double>&,
         const std::map<std::string, int>&,
         std::vector<double>& ) > multivar_func_d;
 
-    // Same as above, but also two indices into parameter vector for
-    // variables involved in second derivative (first wrt i, then wrt j)
+    // Second derivative - modifies last parameter to contain Hessian values
+    // instead of returning a single value
 
-    typedef std::function< void ( std::vector<double>&,
+    typedef std::function< void ( const std::vector<double>&,
         const std::map<std::string, double>&,
         const std::map<std::string, int>&,
         std::vector<std::vector<double> >& ) > multivar_func_d2;   
@@ -48,8 +48,10 @@ namespace optimML{
         
         protected:
             
-            static void dummy_d2_func(std::vector<double>& p, const std::map<std::string, double>& params_d,
-                const std::map<std::string, int>& params_i, std::vector<std::vector<double> >& results);
+            static void dummy_d2_func(const std::vector<double>& p, 
+                const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i, 
+                std::vector<std::vector<double> >& results);
 
             // How many variables in x?
             int n_param;

@@ -58,7 +58,7 @@ namespace optimML{
     /**
      * Cost function least squares
      */
-    double mixcomp_solver::y_ls(vector<double>& x, const map<string, double>& params_d, 
+    double mixcomp_solver::y_ls(const vector<double>& x, const map<string, double>& params_d, 
         const map<string, int>& params_i){
         // NOTE: this will seek to maximize the function, so we need to make this negative.
         return -pow(x[0] - params_d.at("y"), 2);
@@ -67,7 +67,7 @@ namespace optimML{
     /**
      * dy_dx least squares
      */
-    void mixcomp_solver::dy_dx_ls(vector<double>& x, const map<string, double>& params_d, 
+    void mixcomp_solver::dy_dx_ls(const vector<double>& x, const map<string, double>& params_d, 
         const map<string, int>& params_i, vector<double>& results){
         // Again, operating on negative sum of squares instead of positive, so we can
         // maximize
@@ -77,7 +77,7 @@ namespace optimML{
     /**
      * d^2y/dx^2 least squares
      */
-    void mixcomp_solver::d2y_dx2_ls(vector<double>& x, const map<string, double>& params_d,
+    void mixcomp_solver::d2y_dx2_ls(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i, vector<vector<double> >& results){
         // Operating on negative sum of squares instead of positive, so we can maximize
         results[0][0] = -2.0;
@@ -90,7 +90,7 @@ namespace optimML{
      * normalization, so optimizing a normal is the same as optimizing
      * a truncated normal
      */
-    double mixcomp_solver::y_norm(vector<double>& x, const map<string, double>& params_d, 
+    double mixcomp_solver::y_norm(const vector<double>& x, const map<string, double>& params_d, 
         const map<string, int>& params_i){
         return -0.5*pow((x[0]-params_d.at("mu"))/params_d.at("sigma"), 2) - 
             log(params_d.at("sigma")) - 
@@ -100,7 +100,7 @@ namespace optimML{
     /**
      * dy_dx Normal
      */
-    void mixcomp_solver::dy_dx_norm(vector<double>& x, const map<string, double>& params_d,
+    void mixcomp_solver::dy_dx_norm(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i, vector<double>& results){
         results[0] = (x[0]-params_d.at("mu"))/(params_d.at("sigma") * params_d.at("sigma"));
     }
@@ -108,7 +108,7 @@ namespace optimML{
     /**
      * d^2y/dx^2 Normal
      */
-    void mixcomp_solver::d2y_dx2_norm(vector<double>& x, const map<string, double>& params_d,
+    void mixcomp_solver::d2y_dx2_norm(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i, vector<vector<double> >& results){
         results[0][0] = 1.0/(params_d.at("sigma") * params_d.at("sigma"));
     }
@@ -116,7 +116,7 @@ namespace optimML{
     /**
      * Log likelihood Beta
      */
-    double mixcomp_solver::y_beta(vector<double>& x, const map<string, double>& params_d,
+    double mixcomp_solver::y_beta(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i){
         double alpha = params_d.at("alpha");
         double beta = params_d.at("beta");
@@ -127,7 +127,7 @@ namespace optimML{
     /**
      * dy_dx Beta
      */
-    void mixcomp_solver::dy_dx_beta(vector<double>& x, const map<string, double>& params_d,
+    void mixcomp_solver::dy_dx_beta(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i, vector<double>& results){
         double alpha = params_d.at("alpha");
         double beta = params_d.at("beta");
@@ -137,7 +137,7 @@ namespace optimML{
     /**
      * d^2y_dx^2 Beta
      */
-    void mixcomp_solver::d2y_dx2_beta(vector<double>& x, const map<string, double>& params_d,
+    void mixcomp_solver::d2y_dx2_beta(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i, vector<vector<double> >& results){
         double alpha = params_d.at("alpha");
         double beta = params_d.at("beta");
@@ -147,7 +147,7 @@ namespace optimML{
     /**
      * Log likelihood Binomial
      */
-    double mixcomp_solver::y_binom(vector<double>& x, const map<string, double>& params_d,
+    double mixcomp_solver::y_binom(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i){
         double n = params_d.at("n");
         double k = params_d.at("k");
@@ -166,7 +166,7 @@ namespace optimML{
     /**
      * dy_dx Binomial
      */
-    void mixcomp_solver::dy_dx_binom(vector<double>& x, const map<string, double>& params_d,
+    void mixcomp_solver::dy_dx_binom(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i, vector<double>& results){
         double n = params_d.at("n");
         double k = params_d.at("k");
@@ -177,7 +177,7 @@ namespace optimML{
     /**
      * d^2y_dx^2 Binomial
      */
-    void mixcomp_solver::d2y_dx2_binom(vector<double>& x, const map<string, double>& params_d,
+    void mixcomp_solver::d2y_dx2_binom(const vector<double>& x, const map<string, double>& params_d,
         const map<string, int>& params_i, vector<vector<double> >& results){
         double n = params_d.at("n");
         double k = params_d.at("k");
