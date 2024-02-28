@@ -11,6 +11,8 @@ This library was designed to make it easy to find maximum likelihood estimates (
 * Maximize multivariate log likelihood functions, with the ability to compute the first derivative and given initial parameter guesses, using BFGS
    * Relevant class: `multivar_ml_solver`
    * Helper class to simplify solving mixture proportion problems (see below): `mixcomp_solver`
+ * Solve a multivariate system of equations by minimizing the sum of squared residuals, given one function per equation, and another function per equation to evaluate its gradient
+   * Relevant class: `multivar_sys_solver`
      
 ## Some features
 
