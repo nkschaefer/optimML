@@ -4,7 +4,7 @@ A fast and flexible C++ library for numeric optimization of complex log likeliho
 ## Use case
 This library was designed to make it easy to find maximum likelihood estimates (MLE) or maximum a posteriori estimates (MAP), given arbitrary complex log likelihood functions to be evaluated on a data set consisting of many observations. It includes classes designed to:
 * Maximize univariate log likelihood functions by finding a root of the derivative within a fixed interval (using Brent's method)
-  * Can optionally estimate the standard error of the MLE/MAP estimate using the Fisher information, if a function for evaluating the second derivative is provided
+  * Can optionally estimate the standard error of the MLE/ Laplace approximation standard error around the MAP estimate using the observed Fisher information, if a function for evaluating the second derivative is provided
   * Relevant class: `brent_solver`
 * Maximize univariate log likelihood functions (or any other function) within a fixed interval without derivative information, using golden section search
    * Relevant class: `golden_solver`
@@ -25,6 +25,7 @@ This library was designed to make it easy to find maximum likelihood estimates (
 #### Prior distributions
 * Convenient methods are provided to add a prior distribution on one or more independent variables. This will result in maximum a posteriori (MAP) estimates being computed for each independent variable, rather than maximum likelihood estimates (MLEs).
    * To specify an arbitrary prior distribution, the user must provide a function to compute its log likelihood and its derivative (and its second derivative, if using Brent's method and the standard error of the estimate is desired)
+   * If a second derivative is supplied, the standard errors given are for the [Laplace approximation](https://en.wikipedia.org/wiki/Laplace%27s_approximation) of the posterior around its mode, which is accurate in the case of infinite data.
 * Some pre-set prior distributions are provided for which the user does not need to provide any functions (currently included: Normal, truncated Normal, Beta, and Binomial)
 
 #### Weighted observations
