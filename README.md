@@ -25,6 +25,7 @@ This library was designed to make it easy to find maximum likelihood estimates (
 #### Prior distributions
 * Convenient methods are provided to add a prior distribution on one or more independent variables. This will result in maximum a posteriori (MAP) estimates being computed for each independent variable, rather than maximum likelihood estimates (MLEs).
    * To specify an arbitrary prior distribution, the user must provide a function to compute its log likelihood and its derivative (and its second derivative, if using Brent's method and the standard error of the estimate is desired)
+   * If a second derivative is supplied, the standard errors given are for the [Laplace approximation](https://en.wikipedia.org/wiki/Laplace%27s_approximation) of the posterior around its mode, which is accurate in the case of infinite data.
 * Some pre-set prior distributions are provided for which the user does not need to provide any functions (currently included: Normal, truncated Normal, Beta, and Binomial)
 
 #### Weighted observations
