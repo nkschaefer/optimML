@@ -85,12 +85,39 @@ namespace optimML{
         n_param = params_init.size();
         n_param_extern = params_init.size();
     }
+    
+    bool multivar::replace_params(vector<double>& params_new){
+        if (params_new.size() != this->x.size()){
+            fprintf(stderr, "ERROR: different number of parameters given\n");
+            return false;    
+        }
+        for (int i = 0; i < params_new.size(); ++i){
+            this->x[i] = params_new[i];
+            this->x_t[i] = params_new[i];
+            this->x_t_extern[i] = params_new[i];
+            this->x_skip[i] = false;
+            this->results[i] = 0;
+            if (this->trans_log[i]){
+                this->trans_log[i] = false;
+                this->trans_logit[i] = false;
+                constrain_pos(i);    
+            }
+            else if (this->trans_logit[i]){
+                this->trans_log[i] = false;
+                this->trans_logit[i] = false;
+                constrain_01(i);
+            }
+        }
+        return true;
+    }
 
     void multivar::init(vector<double> params_init, multivar_func ll,
         multivar_func_d dll, multivar_func_d2 dll2){
-        
         if (!initialized){
             init_params(params_init);
+        }
+        else{
+            replace_params(params_init);
         }
         ll_x = ll;
         dll_dx = dll;
@@ -101,9 +128,11 @@ namespace optimML{
 
     void multivar::init(vector<double> params_init, multivar_func ll,
         multivar_func_d dll){
-        
         if (!initialized){
             init_params(params_init);
+        }
+        else{
+            replace_params(params_init);
         }
         ll_x = ll;
         dll_dx = dll;
@@ -453,6 +482,7 @@ namespace optimML{
         this->trans_log[idx] = true;
         if (x[idx] <= 0){
             fprintf(stderr, "ERROR: initial value %d out of domain for log transformation\n", idx);
+            fprintf(stderr, "value: %f\n", x[idx]);
             return;
         }
         x[idx] = log(x[idx]);
@@ -474,6 +504,7 @@ namespace optimML{
         this->trans_logit[idx] = true;
         if (x[idx] <= 0 || x[idx] >= 1.0){
             fprintf(stderr, "ERROR: initial value %d out of domain for logit transformation\n", idx);
+            fprintf(stderr, "value: %f\n", x[idx]);
             return;
         }
         x[idx] = logit(x[idx]);

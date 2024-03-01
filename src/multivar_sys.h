@@ -40,10 +40,22 @@ namespace optimML{
         private:
             std::vector<double> params; 
             multivar_ml_solver solver;
-            std::vector<multivar_sys_func> equations;
-            std::vector<multivar_sys_func_d> equations_deriv;
+            
+            std::map<int, multivar_sys_func> equations1;
+            std::map<int, multivar_sys_func_d> equations1_deriv;
+            std::map<int, multivar_func> equations2;
+            std::map<int, multivar_func_d> equations2_deriv;
+            
+            std::map<std::string, std::vector<double> > data_d;
+            std::map<std::string, std::vector<int> > data_i;
+            
+            std::vector<double> weights;
+
             int n_equations;
             
+            std::vector<bool> trans_log;
+            std::vector<bool> trans_logit;
+
             // Store right-hand side of each equation     
             std::vector<double> rhs;
 
@@ -77,9 +89,34 @@ namespace optimML{
             bool add_equation(multivar_sys_func func, 
                 multivar_sys_func_d func_deriv, 
                 double rhs);
+            
+            // Include weight
+            bool add_equation(multivar_sys_func func,
+                multivar_sys_func_d func_deriv,
+                double rhs,
+                double weight);
 
-            void constrain_pos(int idx);
-            void constrain_01(int idx);
+            bool add_equation(multivar_func func,
+                multivar_func_d func_deriv,
+                double rhs);
+            
+            // Include weight
+            bool add_equation(multivar_func func,
+                multivar_func_d func_deriv,
+                double rhs,
+                double weight);
+
+            // Add data key/val to go with most recently-added equation
+            bool add_data(std::string name, double dat);
+            bool add_data(std::string name, int dat);
+            
+            // Add data key/val to equation by equation index
+            bool set_data(int idx, std::string name, double dat);
+            bool set_data(int idx, std::string name, int dat);
+
+            bool constrain_pos(int idx);
+            bool constrain_01(int idx);
+            
             bool solve();
 
     };

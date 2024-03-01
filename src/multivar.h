@@ -190,6 +190,7 @@ namespace optimML{
             void print_function_error_prior(int idx);
             
             void init_params(std::vector<double> params_init);
+            bool replace_params(std::vector<double>& params_init);
 
         public:
             
