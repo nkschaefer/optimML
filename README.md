@@ -13,6 +13,7 @@ This library was designed to make it easy to find maximum likelihood estimates (
    * Helper class to simplify solving mixture proportion problems (see below): `mixcomp_solver`
  * Solve a multivariate system of equations by minimizing the sum of squared residuals, given one function per equation, and another function per equation to evaluate its gradient
    * Relevant class: `multivar_sys_solver`
+      *  This class uses `multivar_ml_solver` as a backend, but simplifies things for users. Users provide a set of functions, their gradients, and the observed values corresponding to the result/right hand side of each function. Users can supply functions that take only the parameter vector as input, or can provide observed data values and a function that accesses them, in the same way as the other classes.
      
 ## Some features
 
