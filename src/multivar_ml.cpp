@@ -46,6 +46,7 @@ namespace optimML{
      */
     const void multivar_ml_solver::eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
         double& f_bfgs, std::vector<double>& g_bfgs){
+
         // Ignore the Hessian, but still calculate the gradient.
         // Zero out stuff
         for (int i = 0; i < n_param; ++i){
@@ -76,6 +77,11 @@ namespace optimML{
         // entries are zero
 
         // Handle all non-mixture component variables
+        map<int, double> grpsums;
+        for (int i = 0; i < n_param_grp; ++i){
+            grpsums.insert(make_pair(i, 0.0));
+        } 
+
         for (int i = 0; i < n_param-nmixcomp; ++i){
             if (this->trans_log[i]){
                 if (x[i] < xval_log_min || x[i] > xval_log_max){
@@ -97,6 +103,16 @@ namespace optimML{
                 x_t[i] = expit(x[i]);
                 dt_dx[i] = exp(-x[i]) / pow((exp(-x[i]) + 1), 2);
             }
+            else if (param2grp.count(i) > 0){
+                if (x[i] < xval_logit_min || x[i] > xval_logit_max){
+                    x_skip[i] = true;
+                }
+                else{
+                    x_skip[i] = false;
+                }
+                x_t[i] = expit(x[i]);
+                grpsums[param2grp[i]] += x_t[i];
+            }
             else{
                 if (x[i] < xval_min || x[i] > xval_max){
                     x_skip[i] = true;
@@ -109,6 +125,22 @@ namespace optimML{
             }
             x_t_extern[i] = x_t[i];
         }
+
+        for (map<int, int>::iterator pg = param2grp.begin(); pg != param2grp.end();
+            ++pg){
+            // Normalize each member of a sum-to-one group
+            x_t[pg->first] /= grpsums[pg->second];
+            x_t_extern[pg->first] = x_t[pg->first];
+            
+            // Handle derivatives of sum-to-one groups
+            double e_negx1 = exp(-x[pg->first]);
+            double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
+            double e_negx1_p1_3 = e_negx1_p1_2 * (e_negx1 + 1);
+            double der_comp1 = e_negx1 / (e_negx1_p1_2 * grpsums[pg->second]) - 
+                e_negx1 / (e_negx1_p1_3 * grpsums[pg->second] * grpsums[pg->second]);
+            dt_dx[pg->first] = der_comp1;
+        }
+    
         // Handle all mixture component variables
         mixcompsum = 0.0;
 
@@ -149,6 +181,7 @@ namespace optimML{
             loglik += eval_ll_x(i);
             eval_dll_dx(i);
         }
+
         // Let prior distributions contribute and wrap up calculations
         // at the end, independent of data
         loglik += eval_ll_x(-1);
@@ -177,7 +210,7 @@ namespace optimML{
         dt_dx.clear();
         dy_dt.clear();
         dy_dt_prior.clear();
-        
+         
         for (int i = 0; i < n_param; ++i){
             // Gradient
             G.push_back(0.0);
@@ -191,7 +224,7 @@ namespace optimML{
                 dy_dt_prior.push_back(1.0);
             }
         }
-
+        
         std::function<void(const STLBFGS::vector&, double&, STLBFGS::vector&)> f = 
             [=](const STLBFGS::vector& a, double& b, STLBFGS::vector& c) {
             this->eval_funcs_bfgs(a, b, c);

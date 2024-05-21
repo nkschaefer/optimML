@@ -41,7 +41,7 @@ namespace optimML{
         n_data = 0;
         nmixcomp = 0;
         has_prior_mixcomp = false;
-
+        n_param_grp = 0;
         xval_max = 1e15;
         xval_min = 1e-15;
         xval_log_min = log(xval_min);
@@ -52,38 +52,49 @@ namespace optimML{
         initialized = false;
     }
     
+    void multivar::add_one_param(double param){
+        x.push_back(param);
+        x_t.push_back(param);
+        x_t_extern.push_back(param);
+        x_skip.push_back(false);
+        dy_dt_extern.push_back(0.0);
+
+        /*
+        vector<double> d2y_dt2_row;
+        for (int j = 0; j < params_init.size(); ++j){
+            d2y_dt2_row.push_back(0.0);
+        }
+        d2y_dt2_extern.push_back(d2y_dt2_row);
+        */
+
+        results.push_back(0.0);
+        se.push_back(0.0);
+
+        has_prior.push_back(false);
+        ll_x_prior.push_back(dummy_prior_func);
+        dll_dx_prior.push_back(dummy_prior_func);
+        d2ll_dx2_prior.push_back(dummy_prior_func);
+
+        trans_log.push_back(false);
+        trans_logit.push_back(false);  
+        
+        map<string, double> m1;
+        params_prior_double.push_back(m1);
+        map<string, int> m2;
+        params_prior_int.push_back(m2);
+        
+        n_param++;
+        n_param_extern++;
+    }
+
     void multivar::init_params(vector<double> params_init){
         
+        n_param = 0;
+        n_param_extern = 0;
+
         for (int i = 0; i < params_init.size(); ++i){
-            x.push_back(params_init[i]);
-            x_t.push_back(params_init[i]);
-            x_t_extern.push_back(params_init[i]);
-            x_skip.push_back(false);
-            dy_dt_extern.push_back(0.0);
-            vector<double> d2y_dt2_row;
-            for (int j = 0; j < params_init.size(); ++j){
-                d2y_dt2_row.push_back(0.0);
-            }
-            d2y_dt2_extern.push_back(d2y_dt2_row);
-
-            results.push_back(0.0);
-            se.push_back(0.0);
-
-            has_prior.push_back(false);
-            ll_x_prior.push_back(dummy_prior_func);
-            dll_dx_prior.push_back(dummy_prior_func);
-            d2ll_dx2_prior.push_back(dummy_prior_func);
-
-            trans_log.push_back(false);
-            trans_logit.push_back(false);  
-            
-            map<string, double> m1;
-            params_prior_double.push_back(m1);
-            map<string, int> m2;
-            params_prior_int.push_back(m2);
+            add_one_param(params_init[i]);     
         }   
-        n_param = params_init.size();
-        n_param_extern = params_init.size();
     }
     
     bool multivar::replace_params(vector<double>& params_new){
@@ -180,6 +191,35 @@ namespace optimML{
             exit(1);
         }
         this->params_prior_int[idx].insert(make_pair(name, data));
+        return true;
+    }
+    
+    /**
+     * Add a group of parameters where each must be between 0 and 1 (exclusive)
+     * and all must sum to 1. This could, for example, be the parameter vector
+     * for a multinomial distribution.
+     *
+     * NOTE: this is distinct from the idea of "mixture components" (see below).
+     * You can have an arbitrary number of groups added by this function but only
+     * one set of mixture components.
+     */ 
+    bool multivar::add_param_grp(vector<double>& pg){
+        // Ensure they sum to 1
+        double tot = 0.0;
+        for (int i = 0; i < pg.size(); ++i){
+            tot += pg[i];
+            if (pg[i] <= 0){
+                fprintf(stderr, "ERROR: parameters in param group cannot be <= 0\n");
+                return false;
+            }
+        }
+        int group_idx = this->n_param_grp;
+        for (int i = 0; i < pg.size(); ++i){
+            int param_idx = this->x.size();
+            this->param2grp.insert(make_pair(param_idx, group_idx));
+            this->add_one_param(logit(pg[i] / tot));
+        }
+        this->n_param_grp++;
         return true;
     }
 
@@ -436,6 +476,20 @@ namespace optimML{
         }
         return true;
     }
+    
+    bool multivar::add_poisson_prior(int idx, double lambda){
+        if (lambda <= 0){
+            fprintf(stderr, "ERROR: lambda must be >= 0\n");
+            return false;
+        }
+        if (!add_prior(idx, ll_prior_poisson, dll_prior_poisson, d2ll_prior_poisson)){
+            return false;
+        }
+        if (!add_prior_param(idx, "lambda", lambda)){
+            return false;
+        }
+        return true;
+    }
 
     bool multivar::set_param(int idx, double val){
         if (!initialized){
@@ -465,7 +519,7 @@ namespace optimML{
         }
         return true;
     }
-
+   
     void multivar::constrain_pos(int idx){
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
@@ -477,6 +531,10 @@ namespace optimML{
         }
         else if (this->trans_logit[idx]){
             x[idx] = expit(x[idx]);
+        }
+        else if (this->param2grp.count(idx) > 0){
+            x[idx] = expit(x[idx]);
+            param2grp.erase(idx);
         }
         this->trans_logit[idx] = false;
         this->trans_log[idx] = true;
@@ -499,6 +557,10 @@ namespace optimML{
         }
         else if (this->trans_log[idx]){
             x[idx] = exp(x[idx]);
+        }
+        else if (this->param2grp.count(idx) > 0){
+            x[idx] = expit(x[idx]);
+            param2grp.erase(idx);
         }
         this->trans_log[idx] = false;
         this->trans_logit[idx] = true;
@@ -595,7 +657,13 @@ namespace optimML{
      * Evaluate the log likelihood function across every current data point.
      */
     double multivar::eval_ll_all(){
+
         double loglik = 0.0;
+        
+        map<int, double> grpsums;
+        for (int i = 0; i < n_param_grp; ++i){
+            grpsums.insert(make_pair(i, 0.0));
+        }
 
         // Transform all non-mixture component variables
         for (int i = 0; i < n_param-nmixcomp; ++i){
@@ -605,10 +673,19 @@ namespace optimML{
             else if (this->trans_logit[i]){
                 x_t[i] = expit(x[i]);
             }
+            else if (param2grp.count(i) > 0){
+                x_t[i] = expit(x[i]);
+                grpsums[param2grp[i]] += x_t[i];
+            }
             else{
                 x_t[i] = x[i];
             }
             x_t_extern[i] = x_t[i];
+        }
+
+        for (map<int, int>::iterator pg = param2grp.begin(); pg != param2grp.end(); ++pg){
+            x_t[pg->first] /= grpsums[pg->second];
+            x_t_extern[pg->first] = x_t[pg->first];
         }
         
         // Transform all mixture component variables
@@ -904,6 +981,11 @@ namespace optimML{
      * can see
      */
     void multivar::fill_results(double llprev){
+        map<int, double> grpsums;
+        for (int i = 0; i < n_param_grp; ++i){
+            grpsums.insert(make_pair(i, 0.0));
+        }
+
         // Store un-transformed results
         for (int j = 0; j < n_param-nmixcomp; ++j){
             if (trans_log[j]){
@@ -912,10 +994,19 @@ namespace optimML{
             else if (trans_logit[j]){
                 results[j] = expit(x[j]);
             }
+            else if (param2grp.count(j) > 0){
+                results[j] = expit(x[j]);
+                grpsums[param2grp[j]] += results[j];
+            }
             else{
                 results[j] = x[j];
             } 
         }
+
+        for (map<int, int>::iterator pg = param2grp.begin(); pg != param2grp.end(); ++pg){
+            results[pg->first] /= grpsums[pg->second];
+        }
+
         results_mixcomp.clear();
         double mcsum = 0.0;
         for (int j = 0; j < nmixcomp; ++j){

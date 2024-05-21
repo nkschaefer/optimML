@@ -68,7 +68,13 @@ namespace optimML{
             // Current values of transformed independent variables that aren't mixture
             // components
             std::vector<double> x_t_extern;
-           
+            
+            // How many groups of variables (not mixture components) that must sum to 1?
+            int n_param_grp;
+            
+            // Which parameters are members of which groups that must sum to 1?
+            std::map<int, int> param2grp;
+                       
             std::vector<std::map<std::string, double> > params_prior_double;
             std::vector<std::map<std::string, int> > params_prior_int;
             
@@ -89,7 +95,7 @@ namespace optimML{
 
             // Current values of derivative of transformation function wrt x
             std::vector<double> dt_dx;
-
+            
             // Current values of second derivative of transformation function wrt x
             std::vector<std::vector<double> > d2t_dx2;
             
@@ -200,6 +206,7 @@ namespace optimML{
             void init(std::vector<double> params_init, multivar_func ll,
                 multivar_func_d dll);
             
+            void add_one_param(double p); 
             multivar();
 
             bool add_prior(int idx, prior_func ll, prior_func dll, 
@@ -209,7 +216,8 @@ namespace optimML{
             bool add_normal_prior(int idx, double mu, double sigma);
             bool add_normal_prior(int idx, double mu, double sigma, double a, double b);
             bool add_beta_prior(int idx, double alpha, double beta);
-            
+            bool add_poisson_prior(int idx, double lambda);
+
             bool add_prior_param(int idx, std::string name, double data);
             bool add_prior_param(int idx, std::string name, int data);
 
@@ -219,6 +227,8 @@ namespace optimML{
 
             void randomize_mixcomps();
             bool set_param(int idx, double val);
+            
+            bool add_param_grp(std::vector<double>& pg);
 
             void constrain_pos(int idx);
             void constrain_01(int idx);

@@ -49,12 +49,21 @@ namespace optimML{
             std::map<std::string, std::vector<double> > data_d;
             std::map<std::string, std::vector<int> > data_i;
             
+            std::map<std::string, double> data_d_fixed;
+            std::map<std::string, int> data_i_fixed;
+
             std::vector<double> weights;
+            
+            std::map<int, std::string> priors;
+            std::map<int, std::vector<double> > prior_params;
 
             int n_equations;
             
             std::vector<bool> trans_log;
             std::vector<bool> trans_logit;
+            
+            int n_param_grp;
+            std::map<int, int> param2grp;
 
             // Store right-hand side of each equation     
             std::vector<double> rhs;
@@ -77,8 +86,13 @@ namespace optimML{
 
         public:
             
+            void add_one_param(double p);
+
             // Initialize with initial guesses of parameters
             multivar_sys_solver(std::vector<double> params_init);
+            multivar_sys_solver();
+
+            void add_param_grp(std::vector<double>& p);
 
             // Parameter values at optimum
             std::vector<double> results;
@@ -113,10 +127,15 @@ namespace optimML{
             // Add data key/val to equation by equation index
             bool set_data(int idx, std::string name, double dat);
             bool set_data(int idx, std::string name, int dat);
+            
+            bool add_data_fixed(std::string name, double dat);
+            bool add_data_fixed(std::string name, int dat);
 
             bool constrain_pos(int idx);
             bool constrain_01(int idx);
             
+            bool add_prior(int idx, std::string name, std::vector<double> params);
+
             bool solve();
 
     };

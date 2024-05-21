@@ -8,11 +8,11 @@ LFLAGS=-L$(PREFIX)/lib
 STLBFGS_O=build/linesearch.o build/stlbfgs.o
 all: lib/liboptimml.so lib/liboptimml.a
 
-lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
-	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O) -lstdc++
+lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o build/glm.o $(STLBFGS_O)
+	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o build/glm.o $(STLBFGS_O) -lstdc++
 
-lib/liboptimml.a: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
-	ar rcs lib/liboptimml.a build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
+lib/liboptimml.a: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o build/glm.o $(STLBFGS_O)
+	ar rcs lib/liboptimml.a build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o build/glm.o $(STLBFGS_O)
 
 build/solver.o: src/solver.cpp src/solver.h src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/solver.cpp -o build/solver.o
@@ -38,6 +38,9 @@ build/mixcomp.o: src/mixcomp.cpp src/mixcomp.h src/multivar_ml.h src/multivar.h
 build/multivar_sys.o: src/multivar_sys.cpp src/multivar_ml.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/multivar_sys.cpp -o build/multivar_sys.o
 
+build/glm.o: src/glm.cpp src/glm.h
+	$(COMP) $(FLAGS) $(IFLAGS) -c src/glm.cpp -o build/glm.o
+
 build/functions.o: src/functions.cpp src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/functions.cpp -o build/functions.o
 
@@ -46,6 +49,9 @@ build/linesearch.o: src/stlbfgs/linesearch.h src/stlbfgs/linesearch.cpp
 
 build/stlbfgs.o: src/stlbfgs/stlbfgs.h src/stlbfgs/stlbfgs.cpp
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/stlbfgs/stlbfgs.cpp -o build/stlbfgs.o
+
+build/digamma.o: src/digamma/digamma.h src/digamma/digamma.c
+	$(CCOMP) -c src/digamma/digamma.c -o build/digamma.o
 
 clean:
 	rm build/*.o
@@ -56,6 +62,7 @@ install: | $(PREFIX)/lib $(PREFIX)/include/optimML
 	cp lib/*.so $(PREFIX)/lib
 	cp lib/*.a $(PREFIX)/lib
 	cp src/*.h $(PREFIX)/include/optimML
+	cp src/digamma/*.h $(PREFIX)/include/optimML
 
 $(PREFIX)/lib:
 	mkdir -p $(PREFIX)/lib

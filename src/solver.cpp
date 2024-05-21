@@ -114,6 +114,29 @@ namespace optimML{
         return (1.0-a)/(x*x) + (1.0-b)/((1.0-x)*(1.0-x));
     }
     
+    double solver::ll_prior_poisson(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        double l = params_d.at("lambda");
+        
+        // Compute factorial using Stirling's approximation
+        double lxfac = 0.5*(log(2) + log(M_PI) + log(x)) + 
+            x*(log(x) - log(exp(1)));
+
+        return x*log(l) + -l - lxfac; 
+    } 
+
+    double solver::dll_prior_poisson(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        double l = params_d.at("lambda");
+        return x/l - 1.0;
+    }
+
+    double solver::d2ll_prior_poisson(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        double l = params_d.at("lambda");
+        return -x/(l*l);
+    }
+
     /**
      * Placeholder to fill in prior function arrays until replaced with 
      * a real function
@@ -123,6 +146,12 @@ namespace optimML{
         return 0.0;
     }
     
+    /**
+     *  WARNING: this does not copy the data into the solver object. In other words,
+     *  you must keep a valid copy of the data outside of this class -- you cannot
+     *  declare vectors in a loop and add them using this function, as they will be
+     *  garbage collected before the solver can run.
+     */    
     bool solver::add_data(string name, std::vector<double>& dat){
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
@@ -143,6 +172,7 @@ namespace optimML{
         this->params_double_vals.push_back(dat.data());
         this->param_double_cur.insert(make_pair(name, 0.0));
         this->param_double_ptr.push_back(&(this->param_double_cur.at(name)));
+
         return true;
     }
 

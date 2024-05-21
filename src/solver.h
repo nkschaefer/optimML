@@ -47,7 +47,13 @@ namespace optimML{
                 const std::map<std::string, int>& params_i);
             static double d2ll_prior_beta(double x, const std::map<std::string, double>& params_d,
                 const std::map<std::string, int>& params_i);
-        
+            static double ll_prior_poisson(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
+            static double dll_prior_poisson(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
+            static double d2ll_prior_poisson(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i); 
+
             static double dummy_prior_func(double x, const std::map<std::string, double>& params_d,
                 const std::map<std::string, int>& params_i);   
 
