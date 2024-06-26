@@ -55,14 +55,14 @@ double optimML::brent_solver::solve(double lower, double upper){
 
     // Attempt to make interval feasible if transformations are being used.
     if (this->trans_log && lower == 0){
-        lower += this->delta_thresh;
+        lower += this->xval_precision;
     }
     else if (this->trans_logit && (lower == 0 || upper == 1)){
         if (lower == 0){
-            lower += this->delta_thresh;
+            lower += this->xval_precision;
         }
         if (upper == 1){
-            upper -= this->delta_thresh;
+            upper -= this->xval_precision;
         }
     }
     if ((this->trans_log && (lower <= 0 || upper <= 0)) ||
@@ -167,7 +167,6 @@ transformation of the data.\n", lower, upper);
     bool root_in_interval = (f_a < 0 && f_c > 0) || (f_a > 0 && f_c < 0);
     
     if (!root_in_interval){
-
         this->root_found = false;
         this->se_found = false;
         this->se = 0.0;

@@ -45,6 +45,9 @@ namespace optimML{
             // How do we compute 2nd derivative of log likelihood (optional)?
             univar_func d2ll_dx2;
             
+            // Small value to bump independent variable in edge cases
+            double xval_precision;
+
             double cur_ll_x;
             double cur_dll_dx;
             double cur_d2ll_dx2;

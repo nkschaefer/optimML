@@ -33,7 +33,9 @@ namespace optimML{
         has_prior = false;
         trans_log = false;
         trans_logit = false;
-        
+       
+        xval_precision = 1e-8;
+
         cur_ll_x = 0;
         cur_dll_dx = 0;
         cur_d2ll_dx2 = 0;
