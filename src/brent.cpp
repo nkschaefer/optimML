@@ -197,7 +197,7 @@ transformation of the data.\n", lower, upper);
         }
     }
 
-    while (delta > this->delta_thresh && nits < this->maxiter){
+    while (delta > this->delta_thresh && (this->maxiter < 0 || nits < this->maxiter)){
         ++nits;
 
         double f_a_safe = f_a;
