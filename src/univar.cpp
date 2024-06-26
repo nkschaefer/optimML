@@ -289,12 +289,13 @@ for prior. Second derivatives will not be calculated.\n");
      */
     void univar::print(double lower, double upper, double step){
         if (trans_log && (lower <= 0)){
-            fprintf(stderr, "ERROR: range given is out of bounds for log transformation\n");
-            return;
+            lower = xval_precision;
         }
-        else if (trans_logit && (lower <= 0 || upper >= 1)){
-            fprintf(stderr, "ERROR: range given is out of bounds for logit transformation\n");
-            return;
+        if (trans_logit && lower <= 0){
+            lower = xval_precision;
+        }
+        if (trans_logit && upper >= 1){
+            upper = 1.0-xval_precision;
         }
         for (double x = lower; x <= upper; x += step){
             double x_t = x;
