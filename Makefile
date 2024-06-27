@@ -5,11 +5,9 @@ PREFIX ?=/usr/local
 FLAGS=-std=c++11 --std=gnu++11 -fPIC
 IFLAGS=-I$(PREFIX)/include
 LFLAGS=-L$(PREFIX)/lib
-ifneq (${CONDA_PREFIX}, "")
-	ifeq ($(findstring "cellbouncer", ${CONDA_PREFIX}), "cellbouncer")
-		IFLAGS += -I${CONDA_PREFIX}/include
-		LFLAGS += -L${CONDA_PREFIX}/lib
-	endif
+ifeq ($(findstring cellbouncer, ${CONDA_PREFIX}), cellbouncer)
+	IFLAGS += -I${CONDA_PREFIX}/include
+	LFLAGS += -L${CONDA_PREFIX}/lib
 endif
 STLBFGS_O=build/linesearch.o build/stlbfgs.o
 all: lib/liboptimml.so lib/liboptimml.a
