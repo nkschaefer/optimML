@@ -95,6 +95,18 @@ namespace optimML{
             // Make things user-friendly after finding a solution and before exiting
             void fill_results(double ll);
             
+            // If the user has added no normal/row based data but only fixed data,
+            // dump all the fixed stuff into the data structures for row-based data.
+            // Return true if we end up with row-based data, false otherwise.        
+            bool fixed_data_to_data();
+            
+            // For use with above method: if user provided only fixed data, we need to store
+            // it somewhere.
+            std::vector<std::vector<double> > data_d_tmp;
+            std::vector<std::vector<int> > data_i_tmp;
+            
+            bool fixed_data_dumped;
+
         public:
             
             solver();
