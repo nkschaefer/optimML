@@ -200,8 +200,11 @@ namespace optimML{
      */
     bool multivar_ml_solver::solve(){
         if (n_data == 0){
-            fprintf(stderr, "ERROR: no data added\n");
-            return false;
+            // Attempt to dump in all fixed data to normal data structures
+            if (!this->fixed_data_to_data()){
+                fprintf(stderr, "ERROR: no data added\n");
+                return false;
+            }
         }
         G.clear();
         

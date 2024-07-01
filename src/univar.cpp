@@ -282,7 +282,12 @@ for prior. Second derivatives will not be calculated.\n");
         this->trans_log = false;
         this->trans_logit = true;
     }
-   
+    
+    // Change the tolerance for stopping iteration.
+    void univar::set_epsilon(double e){
+        xval_precision = e;
+    }
+
     /**
      * For debugging: prints log likelihood, derivative, and possibly second derivative
      * over the specified range.

@@ -37,6 +37,7 @@ namespace optimML{
         delta_thresh = 0.01;
         log_likelihood = 0.0;
         initialized = false;
+        fixed_data_dumped = false;
     }
 
     /**
@@ -224,6 +225,45 @@ namespace optimML{
         param_int_cur.insert(make_pair(name, dat));
         return true;
     }
+    
+    /**
+     * If the user has only provided fixed data (and no regular type data), 
+     * treat the fixed data like regular data.
+     */
+    bool solver::fixed_data_to_data(){
+        if (this->n_data == 0){
+
+            vector<string> dat_d_names;
+            
+            // Everything in param_double_cur and param_int_cur must have come from fixed data.
+            for (map<string, double>::iterator c = param_double_cur.begin(); c !=
+                param_double_cur.end(); ){
+                dat_d_names.push_back(c->first);
+                data_d_tmp.push_back(vector<double>{ c->second });
+                param_double_cur.erase(c++);
+            }
+
+            vector<string> dat_i_names;
+
+            for (map<string, int>::iterator c = param_int_cur.begin(); c != 
+                param_int_cur.end(); ){
+                dat_i_names.push_back(c->first);
+                data_i_tmp.push_back(vector<int>{ c->second });
+                param_int_cur.erase(c++);
+            }
+
+            for (int i = 0; i < data_d_tmp.size(); ++i){
+                this->add_data(dat_d_names[i], data_d_tmp[i]);
+            }
+            for (int i = 0; i < data_i_tmp.size(); ++i){
+                this->add_data(dat_i_names[i], data_i_tmp[i]);
+            }
+            fixed_data_dumped = true;
+        }
+
+        return this->n_data > 0;
+    }
+    
 
     bool solver::add_weights(std::vector<double>& weights){
         if (!initialized){

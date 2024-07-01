@@ -12,11 +12,11 @@ endif
 STLBFGS_O=build/linesearch.o build/stlbfgs.o
 all: lib/liboptimml.so lib/liboptimml.a
 
-lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
-	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O) -lstdc++
+lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
+	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O) -lstdc++
 
-lib/liboptimml.a: build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
-	ar rcs lib/liboptimml.a build/functions.o build/solver.o build/univar.o build/multivar.o build/golden.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
+lib/liboptimml.a: build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
+	ar rcs lib/liboptimml.a build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
 
 build/solver.o: src/solver.cpp src/solver.h src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/solver.cpp -o build/solver.o
@@ -26,9 +26,6 @@ build/univar.o: src/univar.cpp src/univar.h src/solver.h src/functions.h
 
 build/multivar.o: src/multivar.cpp src/multivar.h src/solver.h src/functions.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/multivar.cpp -o build/multivar.o
-
-build/golden.o: src/golden.cpp src/golden.h src/univar.h
-	$(COMP) $(FLAGS) $(IFLAGS) -c src/golden.cpp -o build/golden.o
 
 build/brent.o: src/brent.cpp src/brent.h src/univar.h
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/brent.cpp -o build/brent.o

@@ -41,12 +41,43 @@
 
 namespace optimML{
     class brent_solver: public univar{
+        private:
+            // minimum end of range
+            double a;
+            // middle point of range/solution
+            double b;
+            // end point of range
+            double c;
+            // log likelihood at point a
+            double f_a;
+            // log likelihood at point b
+            double f_b;
+            // log likelihood at point c
+            double f_c;
+            
+            // Keep track of the size of the previous two steps taken
+            double step_prev;
+            double step_2ago;
+
+            double quadfit(bool& success);
+            bool golden();
+            bool interpolate();
+            bool interpolate_der();
+            bool interpolate_root();
+            
+            bool no_deriv;
+            bool root;
         public:
+            
+            void set_root();
+            void set_max();
+
+            brent_solver(univar_func ll);
             brent_solver(univar_func ll, univar_func dll);
             brent_solver(univar_func ll, univar_func dll, univar_func d2ll);
             
             double solve(double min, double max);
-            
+
             double se;
             bool se_found;
     };

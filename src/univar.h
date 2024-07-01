@@ -45,7 +45,7 @@ namespace optimML{
             // How do we compute 2nd derivative of log likelihood (optional)?
             univar_func d2ll_dx2;
             
-            // Small value to bump independent variable in edge cases
+            // Tolerance for convergence
             double xval_precision;
 
             double cur_ll_x;
@@ -85,7 +85,8 @@ namespace optimML{
             void init(univar_func ll_x);
             void init(univar_func ll_x, univar_func dll_dx);
             void init(univar_func ll_x, univar_func dll_dx, univar_func d2ll_dx2);
-
+            
+            
         public:
             
             univar();
@@ -103,6 +104,8 @@ namespace optimML{
             void constrain_pos();
             void constrain_01();
             
+            void set_epsilon(double);
+
             // For debugging
             void print(double start, double end, double step);
             
