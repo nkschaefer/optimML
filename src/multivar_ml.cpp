@@ -207,7 +207,6 @@ namespace optimML{
             }
         }
         G.clear();
-        
         // Initialize data structures to store components of 1st and
         // 2nd derivatives 
         dt_dx.clear();
@@ -248,7 +247,104 @@ namespace optimML{
         fill_results(ll);
         return true; 
     }
+    
+    void multivar_ml_solver::explore_starting_mixcomps_aux(set<int>& elim, 
+        double& ll, 
+        vector<double>& params){
 
+        // How do we represent eliminated elements? 
+        double perc_off = 1e-6;
+        double n_elim = (double)elim.size() + 1;
+        double n_on = (double)(nmixcomp - n_elim);
+        double perc_on = 1.0/n_on - (perc_off*n_elim)/n_on;
+        
+        int best_idx = -1;
+        double best_ll = ll;
+        vector<double> best_params;
+        
+        for (int elim_new = 0; elim_new < nmixcomp; ++elim_new){
+            if (elim.find(elim_new) == elim.end()){
+                vector<double> fracs;
+                for (int i = 0; i < nmixcomp; ++i){
+                    if (i == elim_new || elim.find(i) != elim.end()){
+                        fracs.push_back(perc_off);
+                    }
+                    else{
+                        fracs.push_back(perc_on);
+                    }
+                }
+                this->add_mixcomp_fracs(fracs);
+                this->solve();
+                if (this->log_likelihood > best_ll){
+                    /*                
+                    set<int> elimcpy = elim;
+                    elimcpy.insert(elim_new);
+                    double llcpy = this->log_likelihood;
+                    vector<double> paramscpy = results_mixcomp;
+                    explore_starting_mixcomps_aux(elimcpy, llcpy, paramscpy);
+
+                    if (llcpy > best_ll){
+                        best_ll = llcpy;
+                        best_params = paramscpy;
+                    }
+                    */
+                    best_idx = elim_new;
+                    best_ll = log_likelihood;
+                    best_params = results_mixcomp; 
+                }
+            }
+        }
+        /*
+        if (best_ll > ll){ 
+            ll = best_ll;
+            params = best_params;
+        }
+        return;
+        */
+        if (best_idx == -1){
+            // Can't do better than parent
+            return;
+        }
+        else{
+            // Explore children
+            elim.insert(best_idx);
+            ll = best_ll;
+            params = best_params;
+            if (elim.size() < nmixcomp){
+                explore_starting_mixcomps_aux(elim, ll, params);
+            }
+        }
+    }
+
+    /**
+     * Seek out global maximum likelihood, when mixcomps are present,
+     * in a more directed way: try even proportions, then
+     * try eliminating one component at a time. Take the max of all these,
+     * if it is from eliminating one component, then try eliminating
+     * another, and so on, until we reach a global maximum.
+     */
+    bool multivar_ml_solver::explore_starting_mixcomps(){
+        if (this->nmixcomp == 0){
+            return false;
+        }
+
+        vector<double> lls;
+        vector<double> solutions;
+        double maxll = 0;
+        int maxidx = -1;
+        
+        // Start with whatever we already have (it will be an 
+        // even pool unless set differently by the user)
+        solve();
+        set<int> elim;
+        double ll = log_likelihood;
+        vector<double> params = results_mixcomp;
+        explore_starting_mixcomps_aux(elim, ll, params);
+        
+        results_mixcomp = params;
+        log_likelihood = ll;
+        return true;
+    }
     /**
      * LEGACY CODE
      * Might be useful for a future implementation of Newton-Raphson

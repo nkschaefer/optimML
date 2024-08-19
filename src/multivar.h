@@ -224,8 +224,8 @@ namespace optimML{
             bool add_mixcomp(std::vector<std::vector<double> >& data);
             bool add_mixcomp_fracs(std::vector<double>& fracs);
             bool add_mixcomp_prior(std::vector<double>& alphas);
-
             void randomize_mixcomps();
+            
             bool set_param(int idx, double val);
             
             bool add_param_grp(std::vector<double>& pg);
