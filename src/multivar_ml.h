@@ -27,6 +27,9 @@ namespace optimML{
             
             const void eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
                 double& f_bfgs, std::vector<double>& g_bfgs);
+            
+            void explore_starting_mixcomps_aux(std::set<int>& elim, double& ll, std::vector<double>& params);  
+
 
         public:
            
@@ -37,6 +40,7 @@ namespace optimML{
             
             bool solve();
 
+            bool explore_starting_mixcomps();
     };
 
 }

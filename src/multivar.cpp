@@ -376,6 +376,8 @@ namespace optimML{
             }
         }
     }
+    
+    
 
     /**
      * Evaluate optional Dirichlet prior on mixture components
@@ -715,7 +717,6 @@ namespace optimML{
             // Evaluate functions
             loglik += eval_ll_x(i);
         }
-
         loglik += eval_ll_x(-1);
         return loglik;
     }
