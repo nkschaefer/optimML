@@ -377,7 +377,29 @@ namespace optimML{
         }
     }
     
-    
+    vector<double> multivar::get_cur_mixprops(){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            vector<double> v;
+            return v;
+        } 
+        else if (this->nmixcomp == 0){
+            fprintf(stderr, "ERROR: no mixcomps added\n");
+            vector<double> v;
+            return v;
+        }
+        vector<double> curprops;
+        double mcsum = 0.0;
+        for (int j = 0; j < nmixcomp; ++j){
+            double val = expit(x[n_param-nmixcomp+j]);
+            mcsum += val;
+            curprops.push_back(val);
+        }
+        for (int j = 0; j < nmixcomp; ++j){
+            curprops[j] /= mcsum;
+        }
+        return curprops;
+    }    
 
     /**
      * Evaluate optional Dirichlet prior on mixture components

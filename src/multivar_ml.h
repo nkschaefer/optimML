@@ -28,7 +28,8 @@ namespace optimML{
             const void eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
                 double& f_bfgs, std::vector<double>& g_bfgs);
             
-            void explore_starting_mixcomps_aux(std::set<int>& elim, double& ll, std::vector<double>& params);  
+            void explore_starting_mixcomps_aux(std::set<int>& elim, double& ll, 
+                std::vector<double>& params, const std::vector<double>& params_orig);  
 
 
         public:

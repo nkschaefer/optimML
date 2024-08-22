@@ -187,6 +187,7 @@ namespace optimML{
         loglik += eval_ll_x(-1);
         eval_dll_dx(-1);
         
+
         // Make everything negative to reflect that we're minimizing instead of maximizing
         f_bfgs = -loglik;
         for (int i = 0; i < n_param; ++i){
@@ -250,47 +251,42 @@ namespace optimML{
     
     void multivar_ml_solver::explore_starting_mixcomps_aux(set<int>& elim, 
         double& ll, 
-        vector<double>& params){
+        vector<double>& params,
+        const vector<double>& params_orig){
 
         // How do we represent eliminated elements? 
-        double perc_off = 1e-6;
-        double n_elim = (double)elim.size() + 1;
-        double n_on = (double)(nmixcomp - n_elim);
-        double perc_on = 1.0/n_on - (perc_off*n_elim)/n_on;
+        double perc_off = 0.001;
         
         int best_idx = -1;
         double best_ll = ll;
         vector<double> best_params;
-        
+        vector<double> best_params_orig;
+
         for (int elim_new = 0; elim_new < nmixcomp; ++elim_new){
             if (elim.find(elim_new) == elim.end()){
-                vector<double> fracs;
-                for (int i = 0; i < nmixcomp; ++i){
-                    if (i == elim_new || elim.find(i) != elim.end()){
-                        fracs.push_back(perc_off);
-                    }
-                    else{
-                        fracs.push_back(perc_on);
+                vector<double> fracs(params_orig);
+                if (fracs[elim_new] > perc_off){
+                    // Alter
+                    double orig = fracs[elim_new];
+                    fracs[elim_new] = perc_off;
+                    for (int x = 0 ; x < nmixcomp; ++x){
+                        fracs[x] /= (1.0 - orig + perc_off);
                     }
                 }
                 this->add_mixcomp_fracs(fracs);
                 this->solve();
+                set<int> test = elim;
+                test.insert(elim_new);
+                fprintf(stderr, "ELIM");
+                for (set<int>::iterator t = test.begin(); t != test.end(); ++t){
+                    fprintf(stderr, " %d", *t);
+                }
+                fprintf(stderr, ": LL %f\n", log_likelihood);
                 if (this->log_likelihood > best_ll){
-                    /*                
-                    set<int> elimcpy = elim;
-                    elimcpy.insert(elim_new);
-                    double llcpy = this->log_likelihood;
-                    vector<double> paramscpy = results_mixcomp;
-                    explore_starting_mixcomps_aux(elimcpy, llcpy, paramscpy);
-
-                    if (llcpy > best_ll){
-                        best_ll = llcpy;
-                        best_params = paramscpy;
-                    }
-                    */
                     best_idx = elim_new;
                     best_ll = log_likelihood;
                     best_params = results_mixcomp; 
+                    best_params_orig = fracs;
                 }
             }
         }
@@ -311,7 +307,8 @@ namespace optimML{
             ll = best_ll;
             params = best_params;
             if (elim.size() < nmixcomp){
-                explore_starting_mixcomps_aux(elim, ll, params);
+                // Start from best fit params
+                explore_starting_mixcomps_aux(elim, ll, params, best_params_orig);
             }
         }
     }
@@ -328,19 +325,34 @@ namespace optimML{
             return false;
         }
 
-        vector<double> lls;
-        vector<double> solutions;
-        double maxll = 0;
-        int maxidx = -1;
-        
         // Start with whatever we already have (it will be an 
         // even pool unless set differently by the user)
+        vector<double> orig = get_cur_mixprops();
         solve();
         set<int> elim;
         double ll = log_likelihood;
+        fprintf(stderr, "ELIM none: %f\n", ll);
         vector<double> params = results_mixcomp;
-        explore_starting_mixcomps_aux(elim, ll, params);
-        
+        explore_starting_mixcomps_aux(elim, ll, params, orig);
+        /* 
+        // Also try keeping only one of each
+        double perc_off = 0.001;
+        for (int i = 0; i < nmixcomp; ++i){
+            vector<double> fracs(orig);
+            fracs[i] = 1.0 - perc_off * (double)(nmixcomp-1);
+            for (int j = 0; j < nmixcomp; ++j){
+                if (j != i){
+                    fracs[j] = perc_off;
+                }
+            }
+            this->add_mixcomp_fracs(fracs);
+            this->solve();
+            if (this->log_likelihood > ll){
+                ll = this->log_likelihood;
+                params = this->results_mixcomp;
+            }
+        }
+        */ 
         results_mixcomp = params;
         log_likelihood = ll;
         return true;

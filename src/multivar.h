@@ -225,7 +225,8 @@ namespace optimML{
             bool add_mixcomp_fracs(std::vector<double>& fracs);
             bool add_mixcomp_prior(std::vector<double>& alphas);
             void randomize_mixcomps();
-            
+            std::vector<double> get_cur_mixprops();
+
             bool set_param(int idx, double val);
             
             bool add_param_grp(std::vector<double>& pg);
