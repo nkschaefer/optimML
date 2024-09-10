@@ -157,7 +157,6 @@ namespace optimML{
         for (int i = n_param-nmixcomp; i < n_param; ++i){
             x_t[i] /= mixcompsum;
         }
-
         // Visit each data point
         double loglik = 0.0;
         for (int i = 0; i < n_data; ++i){

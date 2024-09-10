@@ -351,7 +351,6 @@ namespace optimML{
             vector<double> rands;
             double randsum = 0.0;
             for (int i = 0; i < nmixcomp; ++i){
-                
                 default_random_engine generator(time(NULL));
                 gamma_distribution<double> dist(dirichlet_prior_mixcomp[i], 1.0);
                 double samp = dist(generator);
@@ -376,7 +375,31 @@ namespace optimML{
             }
         }
     }
-    
+ 
+    void multivar::randomize_group(int idx){
+        // To do: implement Dirichlet prior for param groups
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (idx >= this->n_param_grp){
+            fprintf(stderr, "ERROR: nonexistent parameter group\n");
+            exit(1);
+        }
+        map<int, double> rands;
+        double randsum = 0.0;
+        for (map<int, int>::iterator g = this->param2grp.begin(); g != this->param2grp.end(); ++g){
+            if (g->second == idx){
+                double r = (double)rand() / (double)RAND_MAX;
+                randsum += r;
+                rands.insert(make_pair(g->first, r));
+            }
+        }
+        for (map<int, double>::iterator r = rands.begin(); r != rands.end(); ++r){
+            x[r->first] = logit(r->second/randsum);
+        }
+    }
+   
     vector<double> multivar::get_cur_mixprops(){
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
@@ -648,7 +671,7 @@ namespace optimML{
             if (isnan(ll) || isinf(ll)){
                 fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
                 print_function_error();
-                exit(1);
+                throw optimML::OPTIMML_MATH_ERR;
             }
             if (this->weights.size() > 0){
                 ll *= this->weights[i];
@@ -664,7 +687,7 @@ namespace optimML{
                         fprintf(stderr, "ERROR: illegal value returned by prior log likelihood function on \
     parameter %d\n", j);
                         print_function_error_prior(j);
-                        exit(1);
+                        throw optimML::OPTIMML_MATH_ERR;
                     }
                     f_x += ll;
                 }
@@ -757,7 +780,7 @@ namespace optimML{
                 if (isnan(dy_dt_extern[j]) || isinf(dy_dt_extern[j])){
                     fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", j);
                     print_function_error();
-                    exit(1);
+                    throw optimML::OPTIMML_MATH_ERR;
                 }
                 double w = 1.0;
                 if (this->weights.size() > 0){
@@ -809,7 +832,7 @@ namespace optimML{
                             fprintf(stderr, "ERROR: illegal value returned by prior gradient function on \
     parameter %d\n", j);
                             print_function_error_prior(j); 
-                            exit(1);
+                            throw optimML::OPTIMML_MATH_ERR;
                         }
                         dy_dt_prior[j] = dllprior;
                         G[j] += dy_dt_prior[j] * dt_dx[j]; 
@@ -858,7 +881,7 @@ namespace optimML{
                         fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function\n");
                         fprintf(stderr, "parameters: %d %d\n", j, k);
                         print_function_error();
-                        exit(1);
+                        throw optimML::OPTIMML_MATH_ERR;
                     }
                     
                     bool j_is_p = nmixcomp > 0 && j == n_param_extern-1;
@@ -968,7 +991,7 @@ namespace optimML{
                         fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function for prior \
     on parameter %d\n", j);
                         print_function_error_prior(j);
-                        exit(1);
+                        throw optimML::OPTIMML_MATH_ERR;
                     }
                     H[j][j] += d2llprior;
                 }
@@ -1049,6 +1072,41 @@ namespace optimML{
     bool multivar::solve(){
         return false;
     }
+    
+    /**
+     * For debugging: prints log likelihood over the specified range
+     * of a single variable.
+     */
+    void multivar::print(int idx, double lower, double upper, double step){
+        double xval_precision = 1e-8;
 
+        if (trans_log[idx] && lower <= 0){
+            lower = xval_precision;
+        }
+        if (trans_logit[idx] && lower <= 0){
+            lower = xval_precision;
+        }
+        if (trans_logit[idx] && upper >= 1){
+            upper = 1.0-xval_precision;
+        }
+
+        // Store original param val
+        double x_orig = x[idx];
+
+        for (double val = lower; val <= upper; val += step){
+            
+            if (this->trans_log[idx]){
+                x[idx] = log(val);
+            }
+            else if (this->trans_logit[idx]){
+                x[idx] = logit(val);
+            }
+            double ll = eval_ll_all();
+            fprintf(stdout, "%f\t%f\n", val, ll);
+        }
+
+        // Put it back
+        x[idx] = x_orig;
+    }
 }
 

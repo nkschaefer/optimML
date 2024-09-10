@@ -21,6 +21,9 @@
 // ===== Base class for solvers =====
 
 namespace optimML{
+    
+    // Exception code for math issues
+    const int OPTIMML_MATH_ERR = 123;
 
     // Function for prior distributions over individual x variables
     typedef std::function< double( double,

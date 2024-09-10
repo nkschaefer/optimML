@@ -182,8 +182,7 @@ namespace optimML{
         
             // Evaluate log likelihood at a given parameter value 
             double eval_ll_x(int i);       
-            double eval_ll_all();
-
+            
             // Evaluate derivative of log likelihood function at given parameter value
             void eval_dll_dx(int i);
             
@@ -230,11 +229,14 @@ namespace optimML{
             bool set_param(int idx, double val);
             
             bool add_param_grp(std::vector<double>& pg);
+            void randomize_group(int idx);
 
             void constrain_pos(int idx);
             void constrain_01(int idx);
             
             bool solve();
+            
+            void print(int idx, double lower, double upper, double step);
 
             // Result
             std::vector<double> results;
@@ -243,6 +245,10 @@ namespace optimML{
 
             // Standard error (or 0 if 2nd derivative unavailable or positive at root)
             std::vector<double> se;
+    
+            double eval_ll_all();
+
+
     };
 }
 

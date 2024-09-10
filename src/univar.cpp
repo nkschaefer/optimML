@@ -72,7 +72,7 @@ namespace optimML{
             param_int_cur.end(); ++it){
             fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
         }
-        exit(1);
+        throw optimML::OPTIMML_MATH_ERR; 
     }
     
     void univar::dump_prior_params(){
@@ -85,7 +85,7 @@ namespace optimML{
             params_prior_int.end(); ++it){
             fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
         }
-        exit(1);
+        throw optimML::OPTIMML_MATH_ERR;
     }
     
     double univar::eval_ll_x(double x){
