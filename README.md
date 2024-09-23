@@ -77,7 +77,7 @@ To accomodate these constraints, each variable is logit transformed and divided 
 
 $$
 \begin{aligned}
-m_j = log(\frac{g_j'}{1 - g_j'}) \\
+m_j = log\left(\frac{g_j'}{1 - g_j'}\right) \\
 \end{aligned}
 $$
 
