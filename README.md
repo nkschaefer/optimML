@@ -74,21 +74,26 @@ $$
 $$
 
 To accomodate these constraints, each variable is logit transformed and divided by the sum of all mixture component variables. In other words, if the initial guess for a given mixture component variable $m_j$ is $g_j$, then each $m_j$ is initialized to 
+
 $$
 \begin{aligned}
-m_j = log(\frac{g_j'}{1 - g_j'})
+m_j = log(\frac{g_j'}{1 - g_j'}) \\
 \end{aligned}
 $$
+
 where 
+
 $$
 \begin{aligned}
-g_j' = \frac{g_j}{\sum\limits_{k=1}^3 g_k}
+g_j' = \frac{g_j}{\sum\limits_{k=1}^3 g_k} \\
 \end{aligned}
 $$
+
 The input to the log likelihood function and its gradient are the back-transformed version of each $m_j$ rather than the $m_j$ values themselves: 
+
 $$
 \begin{aligned}
-t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum\limits_{k=1}^n \frac{1}{e^{-m_k} + 1}}
+t(m_j) = \frac{\frac{1}{e^{-m_j} + 1}}{\sum\limits_{k=1}^n \frac{1}{e^{-m_k} + 1}} \\
 \end{aligned}
 $$
 
@@ -96,9 +101,10 @@ $$
 
 $$
 \begin{aligned}
-p_i = \sum\limits_{j=1}^3 f_{ij}t(m_j)
+p_i = \sum\limits_{j=1}^3 f_{ij}t(m_j) \\
 \end{aligned}
 $$
+
 to the functions the user provided to evaluate the log likelihood and its gradient. This means that the user does not need to worry about the transformation, but only needs to provide the number of mixture components in the model and their expected contributions to the result, the $f_i$ vector, for every observation/data point $A_i$. In this example, the user would need to compare the value of $p_i$ at each function evaluation to the measured frequency of allele $i$ $A_i$. If the user has collected a reference allele count $r_i$ and alt allele count $a_i$ for each allele $i$, for example, this could be done by computing the binomial log likelihood of $a_i$ successes in $r_i + a_i$ draws with the parameter $p_i$.
 
 #### Implementation details
