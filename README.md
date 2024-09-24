@@ -37,6 +37,9 @@ This library was designed to make it easy to find maximum likelihood estimates (
 * The solver can constrain variables to $(0, \infty]$ by log transformation or $(0,1)$ by logit transformation automatically (see below).
 * The solver can treat a set of unknown variables as mixture proportions that must sum to 1 (see below).
 
+#### Multithreading
+* The solvers (currently besides multivar_sys_solver) can be parallelized, letting each row of data/observations be evaluated by a function call in its own thread. To use this functionality, call `solver.set_threads(x)` to use `x` threads. This is mostly useful when there are many observations/data points. In the case of many parameters, parallelization of the BFGS solver will be more useful.
+
 ## Variable transformations
 
 #### Constraining to $(0,\infty]$
@@ -49,7 +52,10 @@ Constraining a variable to $(0,1)$ can be accomplished through logit transformat
 
 #### Constraining a set of variables to $(0,1)$ and ensuring that they sum to 1
 
-This case is designed to model mixture proportions. See next section.
+There are two cases of this handled by this library:
+
+* You can add a parameter group to `multivar_ml_solver` with `add_param_grp(x)`, where `x` is a `std::vector<double>` containing initial guesses of the parameters (the solver will ensure that they sum to 1). The solver will remember that these parameters belong to a group and will handle variable transformations behind the scenes - you can operate on them as usual in function calls, but if you will need to keep track of which parameter in the parameter vector is which. In the end, they will sum to 1.
+* "Mixture proportions" are another case of this situation, where observed data points are a combination of all mixture components, which each contribute a known expected value to the total. See next section.
 
 ## Mixture proportions
 
