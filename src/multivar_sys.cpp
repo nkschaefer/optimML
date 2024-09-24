@@ -44,12 +44,14 @@ namespace optimML{
         }
 
         this->rss = -1;
+        this->nthread = 0;
     }
     
     multivar_sys_solver::multivar_sys_solver(){
         this->n_param_grp = 0;
         n_equations = 0;
         this->rss = -1;
+        this->nthread = 0;
     }
 
     void multivar_sys_solver::add_param_grp(vector<double>& p){
@@ -64,6 +66,13 @@ namespace optimML{
             this->trans_logit.push_back(false);
         }
         this->n_param_grp++;
+    }
+    
+    void multivar_sys_solver::set_threads(int nt){
+        if (nt <= 1){
+            nt = 0;
+        }
+        this->nthread = nt;
     }
 
     // Add an equation
@@ -343,6 +352,9 @@ namespace optimML{
         };
         
         this->solver.init(std::vector<double>{ }, f, fprime);
+        if (this->nthread > 1){
+            this->solver.set_threads(this->nthread);
+        }
         vector<double> curgroup;
         bool in_group = false;
         for (int i = 0; i < params.size(); ++i){

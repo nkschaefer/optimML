@@ -83,6 +83,8 @@ namespace optimML{
                 const std::map<std::string, double>& params_d,
                 const std::map<std::string, int>& params_i,
                 std::vector<double>& results);
+            
+            int nthread;
 
         public:
             
@@ -130,6 +132,8 @@ namespace optimML{
             
             bool add_data_fixed(std::string name, double dat);
             bool add_data_fixed(std::string name, int dat);
+            
+            void set_threads(int nt);
 
             bool constrain_pos(int idx);
             bool constrain_01(int idx);
