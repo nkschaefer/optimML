@@ -110,6 +110,7 @@ namespace optimML{
             void set_delta(double d);
             void set_maxiter(int i); 
             void set_threads(int nt);
+            void set_threads_bfgs(int nt);
             bool solve();
 
             // Where to look after the routine completes

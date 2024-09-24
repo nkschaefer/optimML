@@ -13,7 +13,7 @@ STLBFGS_O=build/linesearch.o build/stlbfgs.o
 # Try to add OpenMP support if available
 OMPFLAG =
 OMP_TEST_CODE = src/omp_test.c
-all: check_openmp lib/liboptimml.so lib/liboptimml.a
+all: lib/liboptimml.so lib/liboptimml.a
 
 check_openmp:
 	@echo "#include <omp.h>" > $(OMP_TEST_CODE)

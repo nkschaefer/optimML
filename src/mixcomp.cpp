@@ -255,6 +255,10 @@ namespace optimML{
     void mixcomp_solver::set_threads(int nt){
         solver.set_threads(nt);
     }
+    
+    void mixcomp_solver::set_threads_bfgs(int nt){
+        solver.set_bfgs_threads(nt);
+    }
 
     bool mixcomp_solver::solve(){
         bool success = solver.solve();

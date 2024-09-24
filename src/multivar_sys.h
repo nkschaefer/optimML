@@ -85,6 +85,7 @@ namespace optimML{
                 std::vector<double>& results);
             
             int nthread;
+            int nthread_bfgs;
 
         public:
             
@@ -134,6 +135,7 @@ namespace optimML{
             bool add_data_fixed(std::string name, int dat);
             
             void set_threads(int nt);
+            void set_threads_bfgs(int nt);
 
             bool constrain_pos(int idx);
             bool constrain_01(int idx);
