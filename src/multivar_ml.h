@@ -30,7 +30,8 @@ namespace optimML{
             
             void explore_starting_mixcomps_aux(std::set<int>& elim, double& ll, 
                 std::vector<double>& params, const std::vector<double>& params_orig);  
-
+            
+            int nthread_bfgs;
             
         public:
            
@@ -42,6 +43,8 @@ namespace optimML{
             bool solve();
 
             bool explore_starting_mixcomps();
+            
+            void set_bfgs_threads(int nt);
     };
    
 }

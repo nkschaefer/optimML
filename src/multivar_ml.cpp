@@ -33,13 +33,23 @@ namespace optimML{
     
     multivar_ml_solver::multivar_ml_solver(){
         // Parent constructor should handle everything important
+        nthread_bfgs = 1;
     }
 
     multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
         multivar_func ll, multivar_func_d dll){
         init(params_init, ll, dll);
+        nthread_bfgs = 1;
     }
     
+    void multivar_ml_solver::set_bfgs_threads(int nt){
+        if (nt <= 1){
+            nthread_bfgs = 1;
+        }
+        else{
+            nthread_bfgs = nt;
+        }
+    } 
     /**
      * When solving via BFGS, evaluate functions and deal with variable transformations
      * and resulting adjustments to derivatives.
@@ -292,7 +302,7 @@ namespace optimML{
             this->eval_funcs_bfgs(a, b, c);
         };
         
-        STLBFGS::Optimizer opt{f};
+        STLBFGS::Optimizer opt{f, nthread_bfgs};
         opt.verbose = false;
         
         opt.ftol = delta_thresh;

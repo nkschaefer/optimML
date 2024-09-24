@@ -10,7 +10,21 @@ ifeq ($(findstring cellbouncer, ${CONDA_PREFIX}), cellbouncer)
 	LFLAGS += -L${CONDA_PREFIX}/lib
 endif
 STLBFGS_O=build/linesearch.o build/stlbfgs.o
-all: lib/liboptimml.so lib/liboptimml.a
+# Try to add OpenMP support if available
+OMPFLAG =
+OMP_TEST_CODE = src/omp_test.c
+all: check_openmp lib/liboptimml.so lib/liboptimml.a
+
+check_openmp:
+	@echo "#include <omp.h>" > $(OMP_TEST_CODE)
+	@echo "int main() { return 0; }" >> $(OMP_TEST_CODE)
+	@if $(CC) $(OMP_TEST_CODE) -fopenmp -o /dev/null >/dev/null 2>&1; then \
+		echo "OpenMP supported, enabling -fopenmp"; \
+		OMPFLAG=-fopenmp; \
+	else \
+		echo "OpenMP not supported, disabling OpenMP"; \
+	fi
+	@rm -f $(OMP_TEST_CODE)
 
 lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
 	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O) -lstdc++
@@ -45,8 +59,8 @@ build/functions.o: src/functions.cpp src/functions.h
 build/linesearch.o: src/stlbfgs/linesearch.h src/stlbfgs/linesearch.cpp
 	$(COMP) $(FLAGS) $(IFLAGS) -c src/stlbfgs/linesearch.cpp -o build/linesearch.o
 
-build/stlbfgs.o: src/stlbfgs/stlbfgs.h src/stlbfgs/stlbfgs.cpp
-	$(COMP) $(FLAGS) $(IFLAGS) -c src/stlbfgs/stlbfgs.cpp -o build/stlbfgs.o
+build/stlbfgs.o: check_openmp src/stlbfgs/stlbfgs.h src/stlbfgs/stlbfgs.cpp
+	$(COMP) $(FLAGS) $(IFLAGS) $(OMPFLAG) -c src/stlbfgs/stlbfgs.cpp -o build/stlbfgs.o
 
 clean:
 	rm build/*.o
