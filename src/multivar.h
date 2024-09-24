@@ -17,6 +17,10 @@
 #include <cstdlib>
 #include <utility>
 #include <math.h>
+#include <mutex>
+#include <thread>
+#include <deque>
+#include <condition_variable>
 #include "solver.h"
 
 namespace optimML{
@@ -43,9 +47,21 @@ namespace optimML{
         const std::map<std::string, double>&,
         const std::map<std::string, int>&,
         std::vector<std::vector<double> >& ) > multivar_func_d2;   
+    
+    // Arbitrary function to hook into log likelihood evaluation at the end
+    // and adjust it
+    
+    typedef std::function< double ( const std::vector<double>&, 
+        const std::vector<int>& ) > ll_hook;
+
+    // Arbitrary function to hook into gradient evaluation at the end and 
+    // adjust it
+
+    typedef std::function< void ( const std::vector<double>&,
+        const std::vector<int>&, double* ) > dll_hook;
 
     class multivar: public solver{
-        
+       
         protected:
             
             static void dummy_d2_func(const std::vector<double>& p, 
@@ -85,6 +101,13 @@ namespace optimML{
             // How to we compute 2nd derivative of log likelihood of prior on each variable? (optional)
             std::vector<prior_func> d2ll_dx2_prior;
             
+            std::vector<ll_hook> ll_hooks;
+            std::vector<std::vector<double> > ll_hooks_data_d;
+            std::vector<std::vector<int> > ll_hooks_data_i;
+            std::vector<dll_hook> dll_hooks;
+            std::vector<std::vector<double> > dll_hooks_data_d;
+            std::vector<std::vector<int> > dll_hooks_data_i;
+                    
             // Allow an external function to return derivative wrt all variables under
             // consideration in one function call
             std::vector<double> dy_dt_extern;
@@ -112,7 +135,8 @@ namespace optimML{
             std::vector<double> dy_dt_prior;
             
             // Gradient
-            std::vector<double> G;
+            //std::vector<double> G;
+            double* G;
 
             // Hessian
             std::vector<std::vector<double> > H;
@@ -167,6 +191,8 @@ namespace optimML{
 
             // Data for mixture components
             std::vector<std::vector<double> > mixcompfracs;
+            std::vector<std::map<int, double> > mixcompfracs_sparse;
+
             // Computed p-values for mixture components
             std::vector<double> mixcomp_p;
             
@@ -181,21 +207,38 @@ namespace optimML{
                 double& y, std::vector<double>& grad);
         
             // Evaluate log likelihood at a given parameter value 
-            double eval_ll_x(int i);       
+            double eval_ll_x(int i, int thread_idx=-1);       
             
             // Evaluate derivative of log likelihood function at given parameter value
-            void eval_dll_dx(int i);
+            void eval_dll_dx(int i, int thread_idx=-1);
             
             // Evaluate second derivative of log likelihood function at given parameter value
             void eval_d2ll_dx2(int i);
             
             void fill_results(double ll);
             
-            void print_function_error();
+            void print_function_error(int thread_idx=-1);
             void print_function_error_prior(int idx);
             
             void init_params(std::vector<double> params_init);
             bool replace_params(std::vector<double>& params_init);
+            
+            // ----- For multithreading -----
+            
+            std::vector<double> dy_dp_thread;
+            std::vector<std::vector<double> > dy_dt_extern_thread;
+            // This is only needed because the last element (mixcomp combination)
+            // can change row to row
+            std::vector<std::vector<double> > x_t_extern_thread;
+            std::vector<double> mixcompsum_f_thread;
+            
+            double ll_threads; 
+            std::mutex* ll_mutex;
+            std::vector<std::mutex*> G_mutex;
+            
+            void create_threads();
+            void launch_threads();
+            void worker(int thread_idx) override;
 
         public:
             
@@ -207,7 +250,8 @@ namespace optimML{
             
             void add_one_param(double p); 
             multivar();
-
+            ~multivar();
+            
             bool add_prior(int idx, prior_func ll, prior_func dll, 
                 prior_func dll2);
             bool add_prior(int idx, prior_func ll, prior_func dll);
@@ -219,8 +263,17 @@ namespace optimML{
 
             bool add_prior_param(int idx, std::string name, double data);
             bool add_prior_param(int idx, std::string name, int data);
+            
+            void add_likelihood_hook(ll_hook fun, std::vector<double>& ddat,
+                std::vector<int>& idat);
+            void add_gradient_hook(dll_hook fun, std::vector<double>& ddat, 
+                std::vector<int>& idat);
 
+            // Regular matrix
             bool add_mixcomp(std::vector<std::vector<double> >& data);
+            // Sparse matrix
+            bool add_mixcomp(std::vector<std::map<int, double> >& data, int n_components);
+
             bool add_mixcomp_fracs(std::vector<double>& fracs);
             bool add_mixcomp_prior(std::vector<double>& alphas);
             void randomize_mixcomps();
@@ -234,7 +287,7 @@ namespace optimML{
             void constrain_pos(int idx);
             void constrain_01(int idx);
             
-            bool solve();
+            virtual bool solve();
             
             void print(int idx, double lower, double upper, double step);
 

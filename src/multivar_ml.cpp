@@ -46,8 +46,12 @@ namespace optimML{
      */
     const void multivar_ml_solver::eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
         double& f_bfgs, std::vector<double>& g_bfgs){
+        
+        if (g_bfgs.size() != n_param){
+            g_bfgs.resize(n_param);
+        } 
+        this->G = g_bfgs.data();
 
-        // Ignore the Hessian, but still calculate the gradient.
         // Zero out stuff
         for (int i = 0; i < n_param; ++i){
             // Copy param value back from BFGS solver
@@ -59,10 +63,23 @@ namespace optimML{
             }
             dt_dx[i] = 0.0;
         }
-        dy_dp = 0.0;
-        for (int i = 0; i < n_param_extern; ++i){
-            dy_dt_extern[i] = 0.0;
+        
+        if (nthread > 0){
+            for (int t = 0; t < nthread; ++t){
+                dy_dp_thread[t] = 0.0;
+                for (int i = 0; i < n_param_extern; ++i){
+                    dy_dt_extern_thread[t][i] = 0.0;
+                }
+            }
         }
+        else{
+            dy_dp = 0.0;
+             
+            for (int i = 0; i < n_param_extern; ++i){
+                dy_dt_extern[i] = 0.0;
+            }
+        }
+
         if (nmixcomp > 0 && has_prior_mixcomp){
             for (int i = 0; i < nmixcomp; ++i){
                 dy_dt_mixcomp_prior[i] = 0.0;
@@ -84,54 +101,77 @@ namespace optimML{
 
         for (int i = 0; i < n_param-nmixcomp; ++i){
             if (this->trans_log[i]){
+                /*
                 if (x[i] < xval_log_min || x[i] > xval_log_max){
                     x_skip[i] = true;
                 } 
                 else{
                     x_skip[i] = false;
                 }
+                */
                 x_t[i] = exp(x[i]);
                 dt_dx[i] = x_t[i];
             }
             else if (this->trans_logit[i]){
+                /*
                 if (x[i] < xval_logit_min || x[i] > xval_logit_max){
                     x_skip[i] = true;
                 }
                 else{
                     x_skip[i] = false;
                 }
+                */
                 x_t[i] = expit(x[i]);
                 dt_dx[i] = exp(-x[i]) / pow((exp(-x[i]) + 1), 2);
             }
             else if (param2grp.count(i) > 0){
+                /*
                 if (x[i] < xval_logit_min || x[i] > xval_logit_max){
                     x_skip[i] = true;
                 }
                 else{
                     x_skip[i] = false;
                 }
+                */
                 x_t[i] = expit(x[i]);
                 grpsums[param2grp[i]] += x_t[i];
             }
             else{
+                /*
                 if (x[i] < xval_min || x[i] > xval_max){
                     x_skip[i] = true;
                 }
                 else{
                     x_skip[i] = false;
                 }
+                */
                 x_t[i] = x[i];
                 dt_dx[i] = 1.0;
             }
-            x_t_extern[i] = x_t[i];
+            
+            if (nthread > 0 && nmixcomp > 0){
+               for (int t = 0; t < nthread; ++t){
+                   x_t_extern_thread[t][i] = x_t[i];
+               }
+            }
+            else{
+                x_t_extern[i] = x_t[i];
+            }
         }
 
         for (map<int, int>::iterator pg = param2grp.begin(); pg != param2grp.end();
             ++pg){
             // Normalize each member of a sum-to-one group
             x_t[pg->first] /= grpsums[pg->second];
-            x_t_extern[pg->first] = x_t[pg->first];
             
+            if (nthread > 0 && nmixcomp > 0){
+                for (int t = 0; t < nthread; ++t){
+                    x_t_extern_thread[t][pg->first] = x_t[pg->first];
+                }
+            }
+            else{
+                x_t_extern[pg->first] = x_t[pg->first];
+            }
             // Handle derivatives of sum-to-one groups
             double e_negx1 = exp(-x[pg->first]);
             double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
@@ -157,28 +197,43 @@ namespace optimML{
         for (int i = n_param-nmixcomp; i < n_param; ++i){
             x_t[i] /= mixcompsum;
         }
+
+        if (nthread > 0){
+            launch_threads();
+        }
+
         // Visit each data point
         double loglik = 0.0;
         for (int i = 0; i < n_data; ++i){
             
-            // Update parameter maps that will be sent to functions
-            prepare_data(i);
-            
-            // Handle p from mixture proportions, if we have mixture proportions
-            // Also pre-calculate mixcompsum_f, a quantity used in derivatives of
-            // transformation of mixture component variables
-            mixcompsum_f = 0.0;
-            if (nmixcomp > 0){
-                double p = 0.0;
-                for (int k = 0; k < nmixcomp; ++k){
-                    p += mixcompfracs[i][k] * x_t[n_param-nmixcomp+k];
-                    mixcompsum_f += mixcompfracs[i][k] / (exp(-x[k]) + 1);
-                }
-                x_t_extern[x_t_extern.size()-1] = p;
+            if (nthread > 0){
+                this->add_job(i);
             }
-            // Evaluate functions
-            loglik += eval_ll_x(i);
-            eval_dll_dx(i);
+            else{ 
+                // Update parameter maps that will be sent to functions
+                prepare_data(i);
+                
+                // Handle p from mixture proportions, if we have mixture proportions
+                // Also pre-calculate mixcompsum_f, a quantity used in derivatives of
+                // transformation of mixture component variables
+                mixcompsum_f = 0.0;
+                if (nmixcomp > 0){
+                    double p = 0.0;
+                    for (int k = 0; k < nmixcomp; ++k){
+                        p += mixcompfracs_sparse[i][k] * x_t[n_param-nmixcomp+k];
+                        mixcompsum_f += mixcompfracs_sparse[i][k] / (exp(-x[k]) + 1);
+                    }
+                    x_t_extern[x_t_extern.size()-1] = p;
+                }
+                // Evaluate functions
+                loglik += eval_ll_x(i);
+                eval_dll_dx(i);
+            }
+        }
+        
+        if (nthread > 0){
+            close_pool();
+            loglik += ll_threads;
         }
 
         // Let prior distributions contribute and wrap up calculations
@@ -186,12 +241,12 @@ namespace optimML{
         loglik += eval_ll_x(-1);
         eval_dll_dx(-1);
         
-
         // Make everything negative to reflect that we're minimizing instead of maximizing
         f_bfgs = -loglik;
-        for (int i = 0; i < n_param; ++i){
-            g_bfgs[i] = -G[i];
-        }
+        //for (int i = 0; i < n_param; ++i){
+        //    g_bfgs[i] = -G[i];
+        //    g_bfgs[i] = G[i];
+        //}
     }  
 
     /**
@@ -206,7 +261,7 @@ namespace optimML{
                 return false;
             }
         }
-        G.clear();
+        //G.clear();
         // Initialize data structures to store components of 1st and
         // 2nd derivatives 
         dt_dx.clear();
@@ -215,7 +270,7 @@ namespace optimML{
          
         for (int i = 0; i < n_param; ++i){
             // Gradient
-            G.push_back(0.0);
+            //G.push_back(0.0);
             
             // Partial derivatives
             dy_dt.push_back(1.0);
@@ -227,6 +282,11 @@ namespace optimML{
             }
         }
         
+        if (this->nthread > 0 && !threads_init){
+            // Set up everything
+            create_threads();
+        }
+
         std::function<void(const STLBFGS::vector&, double&, STLBFGS::vector&)> f = 
             [=](const STLBFGS::vector& a, double& b, STLBFGS::vector& c) {
             this->eval_funcs_bfgs(a, b, c);

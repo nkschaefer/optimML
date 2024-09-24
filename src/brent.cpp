@@ -392,6 +392,10 @@ double optimML::brent_solver::solve(double lower, double upper){
         }
     }
     
+    if (nthread > 0){
+        create_threads();
+    }
+
     // Attempt to make interval feasible if transformations are being used.
     if (this->trans_log && lower == 0){
         lower += this->xval_precision;

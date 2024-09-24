@@ -16,6 +16,8 @@
 #include <cstdlib>
 #include <utility>
 #include <math.h>
+#include <mutex>
+#include <condition_variable>
 #include "functions.h"
 #include "solver.h"
 
@@ -78,7 +80,7 @@ namespace optimML{
             void dump_prior_params();
 
             // Evaluate all functions at current parameter value
-            void eval_funcs(double x, bool ll, bool dll, bool d2ll);
+            void eval_funcs(double x, bool eval_ll_x, bool eval_dll_dx, bool eval_d2ll_dx2);
             double eval_ll_x(double x);
             double eval_dll_dx(double x);
             double eval_d2ll_dx2(double x);
@@ -86,11 +88,31 @@ namespace optimML{
             void init(univar_func ll_x, univar_func dll_dx);
             void init(univar_func ll_x, univar_func dll_dx, univar_func d2ll_dx2);
             
+            double x_t;
+            double df_dt_x;
+            double d2f_dt2_x;
+
+            // ----- For multithreading
+            double ll_threads;
+            double dll_threads;
+            double d2ll_threads;
+            std::mutex* ll_mutex;
+            std::mutex* dll_mutex;
+            std::mutex* d2ll_mutex;
             
+            bool thread_compute_ll;
+            bool thread_compute_dll;
+            bool thread_compute_d2ll;
+            void create_threads();
+            void launch_threads();
+            void worker(int thread_idx) override;
+            bool threads_init;
+
         public:
             
             univar();
-            
+            ~univar();
+
             void add_prior(prior_func ll);
             void add_prior(prior_func ll, prior_func dll);
             void add_prior(prior_func ll, prior_func dll, prior_func dll2);

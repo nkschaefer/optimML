@@ -35,10 +35,24 @@ namespace optimML{
         trans_logit = false;
        
         xval_precision = 1e-8;
+        initialized = false;
 
         cur_ll_x = 0;
         cur_dll_dx = 0;
         cur_d2ll_dx2 = 0;
+        
+        threads_init = false; 
+        thread_compute_ll = false;
+        thread_compute_dll = false;
+        thread_compute_d2ll = false;
+    }
+
+    univar::~univar(){
+        if (threads_init){
+            delete ll_mutex;
+            delete dll_mutex;
+            delete d2ll_mutex;
+        }
     }
 
     void univar::init(univar_func ll_x){
@@ -106,10 +120,20 @@ namespace optimML{
     /**
      * Evaluate all functions at a given value.
      */
-    void univar::eval_funcs(double x, bool eval_ll, bool eval_der1, bool eval_der2){
-        double x_t = x;
-        double df_dt_x = 1.0; 
-        double d2f_dt2_x = 1.0; 
+    void univar::eval_funcs(double x, bool eval_ll_x, bool eval_dll_dx, bool eval_d2ll_dx2){
+        if (eval_dll_dx && !has_dll_dx){
+            fprintf(stderr, "ERROR: cannot compute first derivative; not given\n");
+            exit(1);
+        }
+        else if (eval_d2ll_dx2 && !has_d2ll_dx2){
+            fprintf(stderr, "ERROR: cannot compute second derivative; not given\n");
+            exit(1);
+        }
+
+        x_t = x;
+        df_dt_x = 1.0; 
+        d2f_dt2_x = 1.0; 
+        
         if (this->trans_log){
             x_t = exp(x);
             // f(x) = e^x -> df_dx = e^x
@@ -123,53 +147,73 @@ namespace optimML{
             df_dt_x = exp(-x) / pow(((exp(-x)) + 1), 2);
             // f(x) = 1/(1 + e^(-x)) -> d2f_dx2 = -(exp(x)*(exp(x) - 1))/(exp(x) + 1)^3
             double e_x = exp(x);
-            double d2f_dt2_x = (e_x*(e_x - 1.0))/pow(e_x + 1.0, 3);
+            d2f_dt2_x = (e_x*(e_x - 1.0))/pow(e_x + 1.0, 3);
         }
         
         cur_ll_x = 0;
         cur_dll_dx = 0;
         cur_d2ll_dx2 = 0;
+        
+        if (nthread > 0){
+            thread_compute_ll = eval_ll_x;
+            thread_compute_dll = eval_dll_dx;
+            thread_compute_d2ll = eval_d2ll_dx2;
+            launch_threads();
+        }
 
         for (int i = 0; i < this->n_data; ++i){
-            this->prepare_data(i);
             
-            double w = 1.0;
-            if (this->weights.size() > 0){
-                w = weights[i];
+            if (nthread > 0){
+                this->add_job(i);
             }
-            
-            if (eval_ll){
-                double y = ll_x(x_t, this->param_double_cur, this->param_int_cur);
-                if (isnan(y) || isinf(y)){
-                    fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_cur_params(); 
+            else{
+                this->prepare_data(i);
+                
+                double w = 1.0;
+                if (this->weights.size() > 0){
+                    w = weights[i];
                 }
-                cur_ll_x += y * w;
-            }
-            if (eval_der1 && this->has_dll_dx){
-                double yprime = dll_dx(x_t, this->param_double_cur, this->param_int_cur);
-                if (isnan(yprime) || isinf(yprime)){
-                    fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_cur_params(); 
+                
+                if (eval_ll_x){
+                    double y = ll_x(x_t, this->param_double_cur, this->param_int_cur);
+                    if (isnan(y) || isinf(y)){
+                        fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
+                        fprintf(stderr, "parameter: %f\n", x_t);
+                        dump_cur_params(); 
+                    }
+                    cur_ll_x += y * w;
                 }
-                cur_dll_dx += yprime * w * df_dt_x;
-            }
-            if (eval_der2 && this->has_d2ll_dx2){
-                double yprime2 = d2ll_dx2(x_t, this->param_double_cur, this->param_int_cur);
-                if (isnan(yprime2) || isinf(yprime2)){
-                    fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_cur_params();  
+                if (eval_dll_dx && this->has_dll_dx){
+                    double yprime = dll_dx(x_t, this->param_double_cur, this->param_int_cur);
+                    if (isnan(yprime) || isinf(yprime)){
+                        fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
+                        fprintf(stderr, "parameter: %f\n", x_t);
+                        dump_cur_params(); 
+                    }
+                    cur_dll_dx += yprime * w * df_dt_x;
                 }
-                cur_d2ll_dx2 += yprime2 * w * d2f_dt2_x;
+                if (eval_d2ll_dx2 && this->has_d2ll_dx2){
+                    double yprime2 = d2ll_dx2(x_t, this->param_double_cur, this->param_int_cur);
+                    if (isnan(yprime2) || isinf(yprime2)){
+                        fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
+                        fprintf(stderr, "parameter: %f\n", x_t);
+                        dump_cur_params();  
+                    }
+                    cur_d2ll_dx2 += yprime2 * w * d2f_dt2_x;
+                }
             }
         }
         
+        if (nthread > 0){
+            close_pool();
+            cur_ll_x += ll_threads;
+            cur_dll_dx += dll_threads;
+            cur_d2ll_dx2 += d2ll_threads;
+        } 
+
         // Handle priors
         if (this->has_prior){
-            if (eval_ll){
+            if (eval_ll_x){
                 double yprior = ll_x_prior(x_t, this->params_prior_double, this->params_prior_int);
                 if (isinf(yprior) || isnan(yprior)){
                     fprintf(stderr, "ERROR: illegal value from prior function\n");
@@ -178,7 +222,7 @@ namespace optimML{
                 }
                 cur_ll_x += yprior;
             }
-            if (eval_der1 && this->has_dll_dx){
+            if (eval_dll_dx && this->has_dll_dx){
                 double yprime_prior = dll_dx_prior(x_t, this->params_prior_double, this->params_prior_int);
                 if (isinf(yprime_prior) || isnan(yprime_prior)){
                     fprintf(stderr, "ERROR: illegal value from first derivative prior function\n");
@@ -187,7 +231,7 @@ namespace optimML{
                 }
                 cur_dll_dx += yprime_prior * df_dt_x;
             }
-            if (eval_der2 && this->has_d2ll_dx2){
+            if (eval_d2ll_dx2 && this->has_d2ll_dx2){
                 
                 double yprime2_prior = d2ll_dx2_prior(x_t, this->params_prior_double, this->params_prior_int);
                 if (isinf(yprime2_prior) || isnan(yprime2_prior)){
@@ -286,6 +330,86 @@ for prior. Second derivatives will not be calculated.\n");
     // Change the tolerance for stopping iteration.
     void univar::set_epsilon(double e){
         xval_precision = e;
+    }
+    
+    void univar::create_threads(){
+        if (threads_init){
+            fprintf(stderr, "ERROR: threads already initialized.\n");
+            exit(1);
+        }
+        
+        // Set up data stuff for threads
+        solver::create_threads();
+        
+        ll_mutex = new mutex;
+        dll_mutex = new mutex;
+        d2ll_mutex = new mutex;
+
+        threads_init = true;
+    }
+    
+    void univar::launch_threads(){
+        solver::launch_threads();
+        ll_threads = 0.0;
+        dll_threads = 0.0;
+        d2ll_threads = 0.0;
+    }
+    
+    void univar::worker(int thread_idx){
+        while(true){
+            
+            if (this->job_inds.size() == 0 && this->terminate_threads){
+                return;
+            }
+            int jid = get_next_job();
+            if (jid == -1){
+                return;
+            }
+            
+            // Prepare data (thread-specific)
+            prepare_data(jid, thread_idx);
+            
+            double w = 1.0;
+            if (this->weights.size() > 0){
+               w = weights[jid];
+            }
+
+            if (thread_compute_ll){
+                double y = ll_x(x_t, this->params_double_cur_thread[thread_idx], 
+                    this->params_int_cur_thread[thread_idx]);
+                if (isnan(y) || isinf(y)){
+                    fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
+                    fprintf(stderr, "parameter: %f\n", x_t);
+                    dump_cur_params(); 
+                }
+                unique_lock<mutex> lock(*ll_mutex);
+                ll_threads += y * w;
+            }
+            if (thread_compute_dll){
+                double yprime = dll_dx(x_t, this->params_double_cur_thread[thread_idx], 
+                    this->params_int_cur_thread[thread_idx]);
+
+                if (isnan(yprime) || isinf(yprime)){
+                    fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
+                    fprintf(stderr, "parameter: %f\n", x_t);
+                    dump_cur_params();
+                }
+                unique_lock<mutex> lock(*dll_mutex);
+                dll_threads += yprime * w * df_dt_x;
+            }
+            if (thread_compute_d2ll){
+                double yprime2 = d2ll_dx2(x_t, this->params_double_cur_thread[thread_idx], 
+                    this->params_int_cur_thread[thread_idx]);
+
+                if (isnan(yprime2) || isinf(yprime2)){
+                    fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
+                    fprintf(stderr, "parameter: %f\n", x_t);
+                    dump_cur_params();  
+                }
+                unique_lock<mutex> lock(*d2ll_mutex);
+                d2ll_threads += yprime2 * w * d2f_dt2_x;
+            }
+        }
     }
 
     /**

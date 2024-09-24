@@ -16,6 +16,10 @@
 #include <math.h>
 #include <time.h>
 #include <random>
+#include <thread>
+#include <mutex>
+#include <deque>
+#include <condition_variable>
 #include "functions.h"
 #include "multivar.h"
 
@@ -49,9 +53,37 @@ namespace optimML{
         xval_logit_min = logit(xval_min);
         xval_logit_max = logit(1.0-xval_min);
         
+        nthread = 0;    
         initialized = false;
+        threads_init = false;
     }
-    
+   
+    multivar::~multivar(){
+        this->x.clear();
+        this->x_t.clear();
+        this->x_t_extern.clear();
+        //this->G.clear();
+        this->results.clear();
+        this->results_mixcomp.clear();
+
+        this->mixcompfracs_sparse.clear();
+        this->params_double_cur_thread.clear();
+        this->params_int_cur_thread.clear();
+        this->param_double_ptr_thread.clear();
+        this->param_int_ptr_thread.clear();
+        this->dy_dp_thread.clear();
+        this->dy_dt_extern_thread.clear();
+        this->x_t_extern_thread.clear();
+        this->mixcompsum_f_thread.clear();
+        for (int i = 0; i < nthread; ++i){
+            delete G_mutex[i];
+        }
+        G_mutex.clear();
+        if (nthread > 0){
+            delete ll_mutex;
+        }
+    } 
+
     void multivar::add_one_param(double param){
         x.push_back(param);
         x_t.push_back(param);
@@ -194,6 +226,20 @@ namespace optimML{
         return true;
     }
     
+    void multivar::add_likelihood_hook(ll_hook fun, vector<double>& data_d,
+        vector<int>& data_i){
+        this->ll_hooks.push_back(fun);
+        this->ll_hooks_data_d.push_back(data_d);
+        this->ll_hooks_data_i.push_back(data_i); 
+    }
+
+    void multivar::add_gradient_hook(dll_hook fun, vector<double>& data_d,
+        vector<int>& data_i){
+        this->dll_hooks.push_back(fun);
+        this->dll_hooks_data_d.push_back(data_d);
+        this->dll_hooks_data_i.push_back(data_i);
+    }
+
     /**
      * Add a group of parameters where each must be between 0 and 1 (exclusive)
      * and all must sum to 1. This could, for example, be the parameter vector
@@ -254,12 +300,24 @@ namespace optimML{
         }
         int ncomp = dat[0].size();
         for (int i = 0; i < dat.size(); ++i){
+            
             if (ncomp != dat[i].size()){
                 fprintf(stderr, "ERROR: component fraction matrix has differing numbers of columns\n");
-                this->mixcompfracs.clear();
+                //this->mixcompfracs.clear();
+                this->mixcompfracs_sparse.clear();
                 return false;
             }
-            this->mixcompfracs.push_back(dat[i]);
+            
+            //this->mixcompfracs.push_back(dat[i]);
+            map<int, double> row_sparse;
+            this->mixcompfracs_sparse.push_back(row_sparse);
+            for (int j = 0; j < ncomp; ++j){
+                if (dat[i][j] > 0){
+                    mixcompfracs_sparse[i].insert(make_pair(j, dat[i][j]));
+                    //row_sparse.insert(make_pair(j, dat[i][j]));
+                }
+            }
+            //this->mixcompfracs_sparse.push_back(row_sparse);
             this->mixcomp_p.push_back(0.0);
         }
 
@@ -286,7 +344,64 @@ namespace optimML{
         }
         return true;
     }
+    
+    bool multivar::add_mixcomp(vector<map<int, double> >& dat, int ncomp){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        // Make sure dimensions agree.
+        int nd = dat.size();
+        if (this->n_data != 0 && this->n_data != nd){
+            fprintf(stderr, "ERROR: data vectors do not have same dimensions\n");
+            return false;
+        }
+        if (nd == 0){
+            fprintf(stderr, "ERROR: component fraction matrix has no rows\n");
+            return false;
+        }
+        for (int i = 0; i < dat.size(); ++i){
+            map<int, double> m;
+            this->mixcompfracs_sparse.push_back(m);
+            for (map<int, double>::iterator d = dat[i].begin(); d != dat[i].end(); ++d){
+                if (d->first < 0 || d->first >= ncomp){
+                    fprintf(stderr, "ERROR: row %d element %d is out of bounds\n", i, d->first);
+                    //this->mixcompfracs.clear();
+                    this->mixcompfracs_sparse.clear();
+                    return false;
+                }
+                else{
+                    this->mixcompfracs_sparse[i].insert(make_pair(d->first, d->second));
+                }
+            }
+            //this->mixcompfracs_sparse.push_back(dat[i]);
+            this->mixcomp_p.push_back(0.0);
+        }
 
+        // Outside functions will see this as a single variable
+        // Add a single slot in the variable array for this new variable
+        this->n_param_extern = n_param + 1;
+        this->x_t_extern.push_back(0.0);
+        this->dy_dt_extern.push_back(0.0);
+        vector<double> lastrow;
+        for (int i = 0; i < d2y_dt2_extern.size(); ++i){
+            d2y_dt2_extern[i].push_back(0.0);    
+            lastrow.push_back(0.0);
+        }
+        lastrow.push_back(0.0);
+        d2y_dt2_extern.push_back(lastrow);
+
+        // Initialize to an even pool
+        this->nmixcomp = ncomp;
+        for (int i = 0; i < ncomp; ++i){
+            n_param++;
+            x.push_back(logit(1.0 / (double)ncomp));
+            x_t.push_back(0.0);
+            x_skip.push_back(false);
+        }
+        return true;
+    }
+    
     /**
      * If we are modeling mixture components, allow the user to add a Dirichlet prior
      * over mixture components. The parameters of the distribution should be provided
@@ -454,7 +569,8 @@ namespace optimML{
         }
         // Fill dy_dt_mixcomp_prior
         for (int i = 0; i < nmixcomp; ++i){
-            if (!x_skip[n_param-nmixcomp+i]){
+            //if (!x_skip[n_param-nmixcomp+i]){
+            if (true){
                 double x_i = x_t[n_param-nmixcomp+i];
                 dy_dt_mixcomp_prior[i] = (dirichlet_prior_mixcomp[i] - 1.0)/x_i;
             }
@@ -470,7 +586,8 @@ namespace optimML{
         }
         // Fill d2y_dt2_mixcomp_prior
         for (int i = 0; i < nmixcomp; ++i){
-            if (!x_skip[n_param-nmixcomp+i]){
+            //if (!x_skip[n_param-nmixcomp+i]){
+            if (true){
                 double x_i = x_t[n_param-nmixcomp+i];
                 d2y_dt2_mixcomp_prior[i] = (1.0 - dirichlet_prior_mixcomp[i])/(x_i*x_i);
             }
@@ -622,20 +739,33 @@ namespace optimML{
     /**
      * When something goes wrong in function evaluation, send a message to stderr.
      */
-    void multivar::print_function_error(){
+    void multivar::print_function_error(int thread_idx){
         fprintf(stderr, "parameters:\n");
         for (int i = 0; i < x_t_extern.size(); ++i){
             fprintf(stderr, "%d): %f\n", i, x_t_extern[i]);
         }
         fprintf(stderr, "data:\n");
-        for (map<string, double>::iterator p = this->param_double_cur.begin(); 
-            p != this->param_double_cur.end(); ++p){
-            fprintf(stderr, "  %s = %f\n", p->first.c_str(), p->second);
+        if (thread_idx != -1){
+            for (map<string, double>::iterator p = this->params_double_cur_thread[thread_idx].begin(); 
+                p != this->params_double_cur_thread[thread_idx].end(); ++p){
+                fprintf(stderr, "  %s = %f\n", p->first.c_str(), p->second);
+            }
+            for (map<string, int>::iterator i = this->params_int_cur_thread[thread_idx].begin();
+                i != this->params_int_cur_thread[thread_idx].end(); ++i){
+                fprintf(stderr, "  %s = %d\n", i->first.c_str(), i->second);
+            }
         }
-        for (map<string, int>::iterator i = this->param_int_cur.begin();
-            i != this->param_int_cur.end(); ++i){
-            fprintf(stderr, "  %s = %d\n", i->first.c_str(), i->second);
+        else{
+            for (map<string, double>::iterator p = this->param_double_cur.begin(); 
+                p != this->param_double_cur.end(); ++p){
+                fprintf(stderr, "  %s = %f\n", p->first.c_str(), p->second);
+            }
+            for (map<string, int>::iterator i = this->param_int_cur.begin();
+                i != this->param_int_cur.end(); ++i){
+                fprintf(stderr, "  %s = %d\n", i->first.c_str(), i->second);
+            }
         }
+        
     }
 
     /**
@@ -663,14 +793,27 @@ namespace optimML{
      * for a single observation)
      * or -1 (tells us we're done with the data and it's time to apply the prior)
      */
-    double multivar::eval_ll_x(int i){
+    double multivar::eval_ll_x(int i, int thread_idx){
         double f_x = 0.0;
         if (i >= 0){
             // Get log likelihood of one (current) row of data
-            double ll = ll_x(x_t_extern, this->param_double_cur, this->param_int_cur);
+            double ll = 0.0;
+            if (thread_idx >= 0){
+                if (nmixcomp > 0){
+                    ll = ll_x(x_t_extern_thread[thread_idx], this->params_double_cur_thread[thread_idx],
+                        this->params_int_cur_thread[thread_idx]);
+                }
+                else{
+                    ll = ll_x(x_t_extern, this->params_double_cur_thread[thread_idx],
+                        this->params_int_cur_thread[thread_idx]);
+                }
+            }
+            else{
+                ll = ll_x(x_t_extern, this->param_double_cur, this->param_int_cur);
+            }
             if (isnan(ll) || isinf(ll)){
                 fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
-                print_function_error();
+                print_function_error(thread_idx);
                 throw optimML::OPTIMML_MATH_ERR;
             }
             if (this->weights.size() > 0){
@@ -679,6 +822,7 @@ namespace optimML{
             f_x += ll;
         }
         else{
+            // No need to use thread specific stuff for prior
             for (int j = 0; j < n_param-nmixcomp; ++j){
                 if (this->has_prior[j]){
                     double ll = ll_x_prior[j](x_t_extern[j], 
@@ -695,6 +839,11 @@ namespace optimML{
             if (nmixcomp > 0 && has_prior_mixcomp){
                 // Evaluate Dirichlet prior on mixture components
                 f_x += ll_mixcomp_prior();
+            }
+            // Let hooks do their thing
+            for (int j = 0; j < this->ll_hooks.size(); ++j){
+                f_x += this->ll_hooks[j](this->ll_hooks_data_d[j],
+                    this->ll_hooks_data_i[j]);
             }
         }
         return f_x;
@@ -754,7 +903,8 @@ namespace optimML{
             if (nmixcomp > 0){
                 double p = 0.0;
                 for (int k = 0; k < nmixcomp; ++k){
-                    p += mixcompfracs[i][k] * x_t[n_param-nmixcomp+k];
+                    //p += mixcompfracs[i][k] * x_t[n_param-nmixcomp+k];
+                    p += mixcompfracs_sparse[i][k] * x_t[n_param-nmixcomp+k];
                 }
                 x_t_extern[x_t_extern.size()-1] = p;
             }
@@ -770,16 +920,48 @@ namespace optimML{
      * Evaluate derivative of log likelihood at current vector; store in 
      * gradient vector.
      */
-    void multivar::eval_dll_dx(int i){
+    void multivar::eval_dll_dx(int i, int thread_idx){
         if (i >= 0){
+            // Zero out derivative
             for (int z = 0; z < n_param_extern; ++z){
-                this->dy_dt_extern[z] = 0.0;
+                if (thread_idx >= 0){
+                    this->dy_dt_extern_thread[thread_idx][z] = 0.0;
+                }
+                else{
+                    this->dy_dt_extern[z] = 0.0;
+                }
             }
-            dll_dx(x_t_extern, this->param_double_cur, this->param_int_cur, dy_dt_extern);
+            if (thread_idx >= 0){
+                if (nmixcomp > 0){
+                    dll_dx(x_t_extern_thread[thread_idx], this->params_double_cur_thread[thread_idx],
+                        this->params_int_cur_thread[thread_idx],
+                        dy_dt_extern_thread[thread_idx]);
+                }
+                else{
+                    dll_dx(x_t_extern, this->params_double_cur_thread[thread_idx],
+                        this->params_int_cur_thread[thread_idx],
+                        dy_dt_extern_thread[thread_idx]);
+                }
+            }
+            else{
+                dll_dx(x_t_extern, this->param_double_cur, this->param_int_cur, dy_dt_extern);
+            }
             for (int j = 0; j < n_param_extern; ++j){
-                if (isnan(dy_dt_extern[j]) || isinf(dy_dt_extern[j])){
-                    fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", j);
-                    print_function_error();
+                int err = -1;
+                if (thread_idx >= 0){
+                    if (isnan(dy_dt_extern_thread[thread_idx][j]) ||
+                        isinf(dy_dt_extern_thread[thread_idx][j])){
+                        err = j;
+                    }
+                }
+                else{
+                    if (isnan(dy_dt_extern[j]) || isinf(dy_dt_extern[j])){
+                        err = j;
+                    }
+                }
+                if (err != -1){
+                    fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", err);
+                    print_function_error(thread_idx);
                     throw optimML::OPTIMML_MATH_ERR;
                 }
                 double w = 1.0;
@@ -787,23 +969,40 @@ namespace optimML{
                     w = this->weights[i];
                 }
                 if (nmixcomp > 0 && j == n_param_extern-1){
-                    dy_dp = dy_dt_extern[j] * w;
+                    if (thread_idx >= 0){
+                        dy_dp_thread[thread_idx] = dy_dt_extern_thread[thread_idx][j] * w;
+                    }
+                    else{
+                        dy_dp = dy_dt_extern[j] * w;
+                    }
                 }
                 else{
-                    dy_dt[j] = dy_dt_extern[j];
-                    if (x_skip[j]){
+                    //dy_dt[j] = dy_dt_extern[j];
+                    //if (x_skip[j]){
+                    if (false){
                         G[j] = 0.0;
                         dt_dx[j] = 0.0;
                     }
                     else{
-                        G[j] += dy_dt[j] * w * dt_dx[j];
+                        if (thread_idx >= 0){
+                            unique_lock<mutex> lock(*G_mutex[j]);
+                            // Subtract instead of add - since BFGS seeks to minimize instead
+                            // of maximize
+                            G[j] -= (dy_dt_extern_thread[thread_idx][j] * w * dt_dx[j]);
+                        }
+                        else{
+                            // Subtract instead of add -- since BFGS seeks to minimize instead
+                            // of maximize
+                            G[j] -= (dy_dt_extern[j] * w * dt_dx[j]);
+                        }
                     }
                 }
             }
             if (nmixcomp > 0){
                 double p = x_t_extern[x_t_extern.size()-1];
                 for (int j = 0; j < nmixcomp; ++j){
-                    if (x_skip[n_param-nmixcomp+j]){
+                    if (false){
+                    //if (x_skip[n_param-nmixcomp+j]){
                         G[n_param-nmixcomp+j] = 0.0;
                         dt_dx[n_param-nmixcomp+j] = 0.0;
                     }
@@ -811,9 +1010,30 @@ namespace optimML{
                         double e_negx = exp(-x[n_param-nmixcomp+j]);
                         double e_negx_p1 = e_negx + 1.0;
                         double e_negx_p1_2 = e_negx_p1*e_negx_p1;
-                        dt_dx[n_param-nmixcomp + j] = ((e_negx)/(e_negx_p1_2 * mixcompsum)) * 
-                            (this->mixcompfracs[i][j] - mixcompsum_f/mixcompsum);
-                        G[n_param-nmixcomp+j] += dy_dp * dt_dx[n_param-nmixcomp + j];
+                        //dt_dx[n_param-nmixcomp + j] = ((e_negx)/(e_negx_p1_2 * mixcompsum)) * 
+                        //    (this->mixcompfracs[i][j] - mixcompsum_f/mixcompsum);
+                        
+                        double mf;
+                        if (thread_idx >= 0){
+                            mf = mixcompsum_f_thread[thread_idx];
+                        }
+                        else{
+                            mf = mixcompsum_f;
+                        }
+                        
+                        double val = ((e_negx)/(e_negx_p1_2 * mixcompsum)) * 
+                            (this->mixcompfracs_sparse[i][j] - mf/mixcompsum);
+                        
+                        if (thread_idx >= 0){
+                            unique_lock<mutex> lock(*G_mutex[n_param-nmixcomp+j]);
+
+                            //dt_dx[n_param-nmixcomp+j] = val;
+                            G[n_param-nmixcomp+j] -= (dy_dp * val);
+                        }
+                        else{
+                            //dt_dx[n_param-nmixcomp+j] = val;
+                            G[n_param-nmixcomp+j] -= (dy_dp * val);
+                        }
                     }
                 }
             }
@@ -822,7 +1042,8 @@ namespace optimML{
             for (int j = 0; j < n_param-nmixcomp; ++j){
                 //G[j] = dy_dt[j] * dt_dx[j];
                 if (this->has_prior[j]){
-                    if (x_skip[j]){
+                    if (false){
+                    //if (x_skip[j]){
                         // Keep it at zero
                     }
                     else{
@@ -835,20 +1056,33 @@ namespace optimML{
                             throw optimML::OPTIMML_MATH_ERR;
                         }
                         dy_dt_prior[j] = dllprior;
-                        G[j] += dy_dt_prior[j] * dt_dx[j]; 
+                        G[j] -= (dy_dt_prior[j] * dt_dx[j]); 
                     }
                 }
             }
             if (nmixcomp > 0 && has_prior_mixcomp){
                 // Evaluate Dirichlet prior on mixture components
-                // This fills dy_dt_dirichlet_prior
+                // This fills dy_dt_mixcomp_prior
                 dll_mixcomp_prior();
                 for (int j = 0; j < nmixcomp; ++j){
                     int j2 = n_param-nmixcomp + j;
-                    if (!x_skip[j2]){
-                        G[j2] += dy_dt_mixcomp_prior[j] * dt_dx[j2];
+                    if (true){
+                    //if (!x_skip[j2]){
+                        double e_negx1 = exp(-x[j2]);
+                        double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
+                        double e_negx1_p1_3 = e_negx1_p1_2 * (e_negx1 + 1);
+                        double der_comp1 = e_negx1 / (e_negx1_p1_2 * mixcompsum) - 
+                            e_negx1 / (e_negx1_p1_3 * mixcompsum * mixcompsum);
+                        
+                        // TO DO: make sure this is right/test it
+                        G[j2] -= dy_dt_mixcomp_prior[j] * der_comp1;
                     }
                 }
+            }
+            // Let hooks do their thing
+            for (int j = 0; j < this->dll_hooks.size(); ++j){
+                this->dll_hooks[j](this->dll_hooks_data_d[j], 
+                    this->dll_hooks_data_i[j], G);
             }
             /*
             for (int j = n_param-nmixcomp; j < n_param; ++j){
@@ -895,13 +1129,16 @@ namespace optimML{
                     if (j_is_p && k_is_p){
                         d2y_dp2 = d2y_dt2_extern[j][k] * w;
                     }    
-                    else if (j_is_p && !x_skip[k]){
+                    else if (j_is_p){
+                    //else if (j_is_p && !x_skip[k]){
                         d2y_dpdt[k] = d2y_dt2_extern[j][k] * w;
                     }
-                    else if (k_is_p && !x_skip[j]){
+                    else if (k_is_p){
+                    //else if (k_is_p && !x_skip[j]){
                         d2y_dtdp[k] = d2y_dt2_extern[j][k] * w;
                     }
-                    else if (!x_skip[j] && !x_skip[k]){
+                    else if (true){
+                    //else if (!x_skip[j] && !x_skip[k]){
                         H[j][k] += d2y_dt2_extern[j][k] * w * d2t_dx2[j][k];
                     }
                 }
@@ -912,14 +1149,16 @@ namespace optimML{
                 for (int j = 0; j < nmixcomp; ++j){
                     int j_i = n_param-nmixcomp + j;
                     
-                    if (x_skip[j_i]){
+                    if (false){
+                    //if (x_skip[j_i]){
                         continue;
                     }
 
                     // Handle second derivatives involving mix comps + non mix comps
                     
                     for (int k = 0; k < n_param-nmixcomp; ++k){
-                        if (!x_skip[k]){
+                        if (true){
+                        //if (!x_skip[k]){
                             H[j_i][k] += dt_dx[j_i] * d2y_dpdt[k];
                             H[k][j_i] += d2y_dtdp[k] * dt_dx[j_i];   
                         }
@@ -933,7 +1172,8 @@ namespace optimML{
                     for (int k = 0; k < nmixcomp; ++k){
                         int k_i = n_param-nmixcomp + k;
                         
-                        if (x_skip[k_i]){
+                        if (false){
+                        //if (x_skip[k_i]){
                             continue;
                         }
 
@@ -945,11 +1185,11 @@ namespace optimML{
                             double exp_negx_p1_j_3 = exp_negx_p1_j_2 * exp_negx_p1_j;
                             double exp_negx_p1_j_4 = exp_negx_p1_j_3 * exp_negx_p1_j;
                             d2t_dx2[j_i][k_i] = 0;
-                            d2t_dx2[j_i][k_i] +=  -(exp_negx * mixcompfracs[i][j]) / 
+                            d2t_dx2[j_i][k_i] +=  -(exp_negx * mixcompfracs_sparse[i][j]) / 
                                 (exp_negx_p1_j_2 * mixcompsum);
-                            d2t_dx2[j_i][k_i] += (2*exp_neg2x*mixcompfracs[i][j]) / 
+                            d2t_dx2[j_i][k_i] += (2*exp_neg2x*mixcompfracs_sparse[i][j]) / 
                                 (exp_negx_p1_j_3 * mixcompsum);
-                            d2t_dx2[j_i][k_i] -= (exp_neg2x * mixcompfracs[i][j]) / 
+                            d2t_dx2[j_i][k_i] -= (exp_neg2x * mixcompfracs_sparse[i][j]) / 
                                 (exp_negx_p1_j_4 * mixcompsum_2);
                             d2t_dx2[j_i][k_i] += (exp_negx * mixcompsum_f) / 
                                 (exp_negx_p1_j_2 * mixcompsum_2);
@@ -957,7 +1197,7 @@ namespace optimML{
                                 (exp_negx_p1_j_3 * mixcompsum_2);
                             d2t_dx2[j_i][k_i] += (2*exp_neg2x * mixcompsum_f) / 
                                 (exp_negx_p1_j_4 * mixcompsum_3);
-                            d2t_dx2[j_i][k_i] += (exp_neg2x * mixcompfracs[i][j]) / 
+                            d2t_dx2[j_i][k_i] += (exp_neg2x * mixcompfracs_sparse[i][j]) / 
                                 (exp_negx_p1_j_4 * mixcompsum_2);
                             
                             H[j_i][k_i] += d2y_dp2 * dt_dx[j_i] * dt_dx[k_i] + 
@@ -967,9 +1207,9 @@ namespace optimML{
                         else{
                             double exp_negx_jminusk = exp(-x[j] - x[k]);
                             d2t_dx2[j_i][k_i] = 0;
-                            d2t_dx2[j_i][k_i] += -(mixcompfracs[i][j] * exp_negx_jminusk) / 
+                            d2t_dx2[j_i][k_i] += -(mixcompfracs_sparse[i][j] * exp_negx_jminusk) / 
                                 (exp_negx_p1_j_2 * exp_negx_p1_k_2 * mixcompsum_2);
-                            d2t_dx2[j_i][k_i] -= (mixcompfracs[i][k] * exp_negx_jminusk) / 
+                            d2t_dx2[j_i][k_i] -= (mixcompfracs_sparse[i][k] * exp_negx_jminusk) / 
                                 (exp_negx_p1_j_2 * exp_negx_p1_k_2 * mixcompsum_2);
                             d2t_dx2[j_i][k_i] += (2 * exp_negx_jminusk * mixcompsum_f) / 
                                 (exp_negx_p1_j_2 * exp_negx_p1_k_2 * mixcompsum_3);
@@ -984,7 +1224,8 @@ namespace optimML{
         }
         else{
             for (int j = 0; j < n_param-nmixcomp; ++j){
-                if (this->has_prior[j] && !x_skip[j]){
+                if (this->has_prior[j]){
+                //if (this->has_prior[j] && !x_skip[j]){
                     double d2llprior = d2ll_dx2_prior[j](x_t[j], this->params_prior_double[j], 
                         this->params_prior_int[j]) * dt_dx[j] * dt_dx[j] + dy_dt_prior[j] * d2t_dx2[j][j]; 
                     if (isnan(d2llprior) || isinf(d2llprior)){
@@ -1002,10 +1243,12 @@ namespace optimML{
                 d2ll_mixcomp_prior();
                 for (int j = 0; j < nmixcomp; ++j){
                     int j2 = n_param-nmixcomp + j;
-                    if (!x_skip[j2]){
+                    if (true){
+                    //if (!x_skip[j2]){
                         for (int k = 0; k < nmixcomp; ++k){
                             int k2 = n_param-nmixcomp + k;
-                            if (!x_skip[k2]){
+                            if (true){
+                            //if (!x_skip[k2]){
                                 if (j == k){
                                     H[j2][j2] += dt_dx[j2]*dt_dx[j2] * d2y_dt2_mixcomp_prior[j] + 
                                         dy_dt_mixcomp_prior[j2] * d2t_dx2[j2][j2]; 
@@ -1019,6 +1262,81 @@ namespace optimML{
                     }
                 }
             }
+        }
+    }
+    
+    void multivar::create_threads(){
+        if (threads_init){
+            fprintf(stderr, "ERROR: threads already initialized.\n");
+            exit(1);
+        }
+        
+        // Set up data stuff for threads
+        solver::create_threads();
+        
+        // Create a distinct data set per thread
+        for (int i = 0; i < nthread; ++i){
+            dy_dp_thread.push_back(0.0);
+            
+            vector<double> dy_dt_row;
+            for (int x = 0; x < dy_dt_extern.size(); ++x){
+                dy_dt_row.push_back(dy_dt_extern[x]);
+            }
+            dy_dt_extern_thread.push_back(dy_dt_row);
+
+            for (int j = 0; j < n_param; ++j){
+                mutex* m = new mutex;
+                G_mutex.push_back(m);
+            } 
+
+            if (nmixcomp > 0){
+                mixcompsum_f_thread.push_back(0.0);
+                vector<double> x_t_ex_row = x_t_extern;
+                x_t_extern_thread.push_back(x_t_ex_row);                
+            }
+
+        } 
+        ll_mutex = new mutex;
+        threads_init = true;
+    }
+    
+    void multivar::launch_threads(){
+        solver::launch_threads();
+        ll_threads = 0.0;
+    }
+
+    void multivar::worker(int thread_idx){
+        while(true){
+            
+            if (this->job_inds.size() == 0 && this->terminate_threads){
+                return;
+            }
+            int jid = get_next_job();
+            if (jid == -1){
+                return;
+            }
+
+            // Prepare data (thread-specific)
+            prepare_data(jid, thread_idx);
+            
+            // Handle p from mixture proportions, if we have mixture proportions
+            // Also pre-calculate mixcompsum_f, a quantity used in derivatives of
+            // transformation of mixture component variables
+            mixcompsum_f = 0.0;
+            if (nmixcomp > 0){
+                double p = 0.0;
+                for (int k = 0; k < nmixcomp; ++k){
+                    p += mixcompfracs_sparse[jid][k] * x_t[n_param-nmixcomp+k];
+                    mixcompsum_f += mixcompfracs_sparse[jid][k] / (exp(-x[k]) + 1);
+                }
+                x_t_extern_thread[thread_idx][x_t_extern.size()-1] = p;
+            }
+            
+            double loglik = eval_ll_x(jid, thread_idx);
+            eval_dll_dx(jid, thread_idx);
+
+            unique_lock<mutex> lock(*ll_mutex);
+            ll_threads += loglik;
         }
     }
 

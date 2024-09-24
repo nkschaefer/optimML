@@ -16,6 +16,8 @@
 #include <math.h>
 #include <time.h>
 #include <random>
+#include <mutex>
+#include <condition_variable>
 #include "functions.h"
 #include "solver.h"
 using std::cout;
@@ -38,7 +40,32 @@ namespace optimML{
         log_likelihood = 0.0;
         initialized = false;
         fixed_data_dumped = false;
+        
+        nthread = 0;
+        terminate_threads = false;
+        pool_open = false;
+        threads_init = false;
     }
+    
+    /**
+     * Destructor
+     */
+    solver::~solver(){
+        param_double_cur.clear();
+        param_int_cur.clear();
+        params_double_names.clear();
+        params_int_names.clear();
+        param_double_ptr.clear();
+        param_int_ptr.clear();
+        params_double_vals.clear();
+        params_int_vals.clear();
+        
+        if (threads_init){
+            delete queue_mutex;
+            delete has_jobs;
+        }
+    }
+    
 
     /**
      * Helper for truncated normal LL calculations
@@ -169,11 +196,19 @@ namespace optimML{
             return false;
         }
         this->n_data = nd;
+        
         this->params_double_names.push_back(name);
         this->params_double_vals.push_back(dat.data());
         this->param_double_cur.insert(make_pair(name, 0.0));
         this->param_double_ptr.push_back(&(this->param_double_cur.at(name)));
-
+        
+        if (threads_init){
+            for (int i = 0; i < nthread; ++i){
+                params_double_cur_thread[i].insert(make_pair(name, 0.0));
+                double* ptr = &params_double_cur_thread[i].at(name);
+                param_double_ptr_thread[i].push_back(ptr);   
+            }
+        }
         return true;
     }
 
@@ -197,9 +232,16 @@ namespace optimML{
         this->params_int_vals.push_back(dat.data());
         this->param_int_cur.insert(make_pair(name, 0.0));
         this->param_int_ptr.push_back(&(this->param_int_cur.at(name)));
+        if (threads_init){
+            for (int i = 0; i < nthread; ++i){
+                params_int_cur_thread[i].insert(make_pair(name, 0.0));
+                int* ptr = &params_int_cur_thread[i].at(name);
+                param_int_ptr_thread[i].push_back(ptr);
+            }
+        }
         return true;
     }
-
+    
     bool solver::add_data_fixed(string name, double dat){
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
@@ -210,6 +252,11 @@ namespace optimML{
             return false;
         }
         param_double_cur.insert(make_pair(name, dat));
+        if (threads_init){
+            for (int i = 0; i < nthread; ++i){
+                params_double_cur_thread[i].insert(make_pair(name, dat));
+            }
+        }
         return true;
     }
 
@@ -223,6 +270,11 @@ namespace optimML{
             return false;
         }
         param_int_cur.insert(make_pair(name, dat));
+        if (threads_init){
+            for (int i = 0; i < nthread; ++i){
+                params_int_cur_thread[i].insert(make_pair(name, dat));
+            }
+        }
         return true;
     }
     
@@ -238,6 +290,11 @@ namespace optimML{
             // Everything in param_double_cur and param_int_cur must have come from fixed data.
             for (map<string, double>::iterator c = param_double_cur.begin(); c !=
                 param_double_cur.end(); ){
+                if (threads_init){
+                    for (int i = 0; i < nthread; ++i){
+                        params_double_cur_thread[i].erase(c->first);
+                    }
+                }
                 dat_d_names.push_back(c->first);
                 data_d_tmp.push_back(vector<double>{ c->second });
                 param_double_cur.erase(c++);
@@ -247,6 +304,11 @@ namespace optimML{
 
             for (map<string, int>::iterator c = param_int_cur.begin(); c != 
                 param_int_cur.end(); ){
+                if (threads_init){
+                    for (int i = 0; i < nthread; ++i){
+                        params_int_cur_thread[i].erase(c->first);
+                    }
+                }
                 dat_i_names.push_back(c->first);
                 data_i_tmp.push_back(vector<int>{ c->second });
                 param_int_cur.erase(c++);
@@ -264,6 +326,127 @@ namespace optimML{
         return this->n_data > 0;
     }
     
+    bool solver::create_threads(){
+        if (threads_init){
+            fprintf(stderr, "ERROR: threads already initialized.\n");
+            return false;
+        }
+        
+        // Create a distinct data set per thread
+        set<string> name_d_copied;
+        set<string> name_i_copied;
+
+        for (int i = 0; i < nthread; ++i){
+            map<string, double> m;
+            map<string, int> m2;
+            params_double_cur_thread.push_back(m);
+            params_int_cur_thread.push_back(m2);
+            vector<double*> v;
+            param_double_ptr_thread.push_back(v);
+            vector<int*> v2;
+            param_int_ptr_thread.push_back(v2);
+            
+            for (int j = 0; j < params_double_names.size(); ++j){
+                params_double_cur_thread[i].insert(make_pair(params_double_names[j], 0.0));
+                double* ptr = &params_double_cur_thread[i].at(params_double_names[j]);
+                param_double_ptr_thread[i].push_back(ptr);
+                if (i == 0){
+                    name_d_copied.insert(params_double_names[j]);
+                }
+            }
+
+            for (map<string, double>::iterator c = param_double_cur.begin(); c != 
+                param_double_cur.end(); ++c){
+                if (name_d_copied.find(c->first) == name_d_copied.end()){
+                    // Fixed data
+                    params_double_cur_thread[i].insert(make_pair(c->first, c->second));
+                }
+            }
+            
+            for (int j = 0; j < params_int_names.size(); ++j){
+                params_int_cur_thread[i].insert(make_pair(params_int_names[j], 0));
+                int* ptr = &params_int_cur_thread[i].at(params_int_names[j]);
+                param_int_ptr_thread[i].push_back(ptr);
+                if (i == 0){
+                    name_i_copied.insert(params_int_names[j]);
+                }
+            }
+
+            for (map<string, int>::iterator c = param_int_cur.begin(); c != 
+                param_int_cur.end(); ++c){
+                if (name_i_copied.find(c->first) == name_i_copied.end()){
+                    // Fixed data
+                    params_int_cur_thread[i].insert(make_pair(c->first, c->second));
+                }
+            }
+        } 
+         
+        queue_mutex = new mutex;
+        has_jobs = new condition_variable;
+    
+        threads_init = true;
+        return true;
+    }
+    
+    void solver::launch_threads(){
+        if (!initialized || !threads_init){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        terminate_threads = false;
+        pool_open = true;
+        for (int i = 0; i < nthread; ++i){
+            thread* t = new thread(&solver::worker, this, i);
+            this->threads.push_back(t);
+        }
+    }
+
+    void solver::add_job(int i){
+        if (!pool_open){
+            fprintf(stderr, "ERROR: thread pool not active\n");
+            exit(1);
+        }
+        unique_lock<mutex> lock(*this->queue_mutex);
+        this->job_inds.push_back(i);
+        this->has_jobs->notify_one();
+    }
+    
+    int solver::get_next_job(){
+        if (!pool_open){
+            fprintf(stderr, "ERROR: thread pool not active\n");
+            exit(1);
+        }
+        unique_lock<mutex> lock(*this->queue_mutex);
+        this->has_jobs->wait(lock, [this]{ return job_inds.size() > 0 ||
+            terminate_threads;});
+        if (this->job_inds.size() == 0 && this->terminate_threads){
+            return -1;
+        }
+        int jid = this->job_inds[0];
+        this->job_inds.pop_front();
+        return jid;
+    }
+
+    void solver::worker(int thread_idx){
+        // To be implemented by child classes - get a job ID and 
+        // process the data
+    }
+    
+    void solver::close_pool(){
+        {
+            unique_lock<mutex> lock(*queue_mutex);
+            terminate_threads = true;
+        }
+        has_jobs->notify_all();
+        for (int i = 0; i < nthread; ++i){
+            threads[i]->join();
+            delete threads[i];
+        }
+        threads.clear();
+        pool_open = false;
+        
+        // Delete thread data?
+    }
 
     bool solver::add_weights(std::vector<double>& weights){
         if (!initialized){
@@ -294,13 +477,38 @@ namespace optimML{
         this->maxiter = m;
     }
     
-    void solver::prepare_data(int i ){
-        // Update parameter maps that will be sent to functions
-        for (int j = 0; j < this->params_double_names.size(); ++j){
-            *(this->param_double_ptr[j]) = (this->params_double_vals[j][i]);
+    void solver::set_threads(int nt){
+        if (threads_init){
+            fprintf(stderr, "ERROR: cannot change thread number after threads initialized\n");
+            exit(1);
         }
-        for (int j = 0; j < this->params_int_names.size(); ++j){
-            *(this->param_int_ptr[j]) = (this->params_int_vals[j][i]);
+        // 1 thread might as well be 0 - don't launch thread stuff for that
+        if (nt <= 1){
+            nt = 0;
+        }
+        nthread = nt;
+    }
+    
+    void solver::prepare_data(int i, int thread_idx){
+        // Update parameter maps that will be sent to functions
+        if (threads_init && thread_idx >= 0){
+            int jid = i;
+            for (int j = 0; j < this->params_double_names.size(); ++j){
+                *(this->param_double_ptr_thread[thread_idx][j]) = 
+                    (this->params_double_vals[j][jid]);
+            }
+            for (int j = 0; j < this->params_int_names.size(); ++j){
+                *(this->param_int_ptr_thread[thread_idx][j]) = 
+                    (this->params_int_vals[j][jid]);
+            }
+        }
+        else{
+            for (int j = 0; j < this->params_double_names.size(); ++j){
+                *(this->param_double_ptr[j]) = (this->params_double_vals[j][i]);
+            }
+            for (int j = 0; j < this->params_int_names.size(); ++j){
+                *(this->param_int_ptr[j]) = (this->params_int_vals[j][i]);
+            }
         }
     }
     
