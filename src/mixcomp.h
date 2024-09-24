@@ -109,6 +109,7 @@ namespace optimML{
             bool add_mixcomp_prior(std::vector<double>& alphas);
             void set_delta(double d);
             void set_maxiter(int i); 
+            void set_threads(int nt);
             bool solve();
 
             // Where to look after the routine completes
