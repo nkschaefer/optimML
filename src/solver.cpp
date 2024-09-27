@@ -438,7 +438,7 @@ namespace optimML{
             terminate_threads = true;
         }
         has_jobs->notify_all();
-        for (int i = 0; i < nthread; ++i){
+        for (int i = 0; i < threads.size(); ++i){
             threads[i]->join();
             delete threads[i];
         }
