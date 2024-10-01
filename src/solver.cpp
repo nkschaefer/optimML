@@ -125,7 +125,9 @@ namespace optimML{
         const map<string, int>& params_i){
         double a = params_d.at("alpha");
         double b = params_d.at("beta");
-        return (a-1.0)*log(x) + (b-1)*log(1.0-x) - (lgamma(a) + lgamma(b) - lgamma(a+b));
+        int intptr;
+        return (a-1.0)*log(x) + (b-1)*log(1.0-x) - 
+            (lgamma_r(a, &intptr) + lgamma_r(b, &intptr) - lgamma_r(a+b, &intptr));
     }
 
     double solver::dll_prior_beta(double x, const map<string, double>& params_d,

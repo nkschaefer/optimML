@@ -549,13 +549,14 @@ namespace optimML{
         double ll = 0.0;
         double alphasum = 0.0;
         double alphasum_neg = 0.0;
+        int intptr;
         for (int i = 0; i < nmixcomp; ++i){
             double x_i = x_t[n_param-nmixcomp+i];
             ll += (dirichlet_prior_mixcomp[i] - 1.0)*log(x_i);
             alphasum += dirichlet_prior_mixcomp[i];
-            alphasum_neg += lgamma(dirichlet_prior_mixcomp[i]);
+            alphasum_neg += lgamma_r(dirichlet_prior_mixcomp[i], &intptr);
         }
-        ll += lgamma(alphasum);
+        ll += lgamma_r(alphasum, &intptr);
         ll -= alphasum_neg;
         return ll;
     }
@@ -1308,9 +1309,9 @@ namespace optimML{
     void multivar::worker(int thread_idx){
         while(true){
             
-            if (this->job_inds.size() == 0 && this->terminate_threads){
-                return;
-            }
+            //if (this->job_inds.size() == 0 && this->terminate_threads){
+            //    return;
+            //}
             int jid = get_next_job();
             if (jid == -1){
                 return;

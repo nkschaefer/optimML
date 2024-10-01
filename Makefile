@@ -2,7 +2,7 @@ SHELL=bash
 COMP=g++
 CCOMP=gcc
 PREFIX ?=/usr/local
-FLAGS=-std=c++11 --std=gnu++11 -fPIC -g
+FLAGS=-std=c++11 --std=gnu++11 -fPIC -D_REENTRANT
 IFLAGS=-I$(PREFIX)/include
 LFLAGS=-L$(PREFIX)/lib
 ifeq ($(findstring cellbouncer, ${CONDA_PREFIX}), cellbouncer)

@@ -120,8 +120,9 @@ namespace optimML{
         const map<string, int>& params_i){
         double alpha = params_d.at("alpha");
         double beta = params_d.at("beta");
+        int intptr;
         return (alpha-1.0)*log(x[0]) + (beta-1.0)*log(1.0-x[0]) + 
-            lgamma(alpha+beta) - lgamma(alpha) - lgamma(beta);
+            lgamma_r(alpha+beta, &intptr) - lgamma_r(alpha, &intptr) - lgamma_r(beta, &intptr);
     }
 
     /**

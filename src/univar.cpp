@@ -358,9 +358,9 @@ for prior. Second derivatives will not be calculated.\n");
     void univar::worker(int thread_idx){
         while(true){
             
-            if (this->job_inds.size() == 0 && this->terminate_threads){
-                return;
-            }
+            //if (this->job_inds.size() == 0 && this->terminate_threads){
+            //    return;
+            //}
             int jid = get_next_job();
             if (jid == -1){
                 return;
