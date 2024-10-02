@@ -27,7 +27,7 @@ check_openmp:
 	@rm -f $(OMP_TEST_CODE)
 
 lib/liboptimml.so: build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
-	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O) -lstdc++
+	$(CCOMP) $(IFLAGS) $(LFLAGS) -shared -o lib/liboptimml.so build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O) -lstdc++ -lpthread
 
 lib/liboptimml.a: build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
 	ar rcs lib/liboptimml.a build/functions.o build/solver.o build/univar.o build/multivar.o build/brent.o build/multivar_ml.o build/mixcomp.o build/multivar_sys.o $(STLBFGS_O)
