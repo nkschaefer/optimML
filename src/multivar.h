@@ -90,7 +90,12 @@ namespace optimML{
             
             // Which parameters are members of which groups that must sum to 1?
             std::map<int, int> param2grp;
-                       
+            std::map<int, std::vector<int> > grp2param;
+
+            // Dirichlet prior data for parameter groups that must sum to 1
+            std::vector<std::vector<double> > param_grp_prior;
+            std::vector<bool> param_grp_has_prior;
+                    
             std::vector<std::map<std::string, double> > params_prior_double;
             std::vector<std::map<std::string, int> > params_prior_int;
             
@@ -163,7 +168,12 @@ namespace optimML{
             // Don't need to store off-diagonals since there are none
             std::vector<double> d2y_dt2_mixcomp_prior;
             void d2ll_mixcomp_prior();
-        
+            
+            double ll_param_grps_prior();
+            void dll_param_grps_prior();
+
+            std::vector<std::vector<double> > dy_dt_param_grp_prior;
+
             // What is the maximum allowable value for any (un-transformed) variable to take?
             double xval_max;
             // What is the minimum allowable value for any (un-transformed) variable to take?
@@ -203,6 +213,8 @@ namespace optimML{
             double mixcompsum_2;
             double mixcompsum_3;
             
+            std::map<int, double> pgsums;
+
             const void eval_funcs_bfgs(const std::vector<double>& x, 
                 double& y, std::vector<double>& grad);
         
@@ -276,8 +288,11 @@ namespace optimML{
 
             bool add_mixcomp_fracs(std::vector<double>& fracs);
             bool add_mixcomp_prior(std::vector<double>& alphas);
-            void randomize_mixcomps();
+            void randomize_mixcomps(bool invert=false);
             std::vector<double> get_cur_mixprops();
+            
+            bool add_param_grp_prior(int i, std::vector<double>& alphas);
+            bool has_any_param_grp_prior;
 
             bool set_param(int idx, double val);
             

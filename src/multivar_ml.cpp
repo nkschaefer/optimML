@@ -56,12 +56,10 @@ namespace optimML{
      */
     const void multivar_ml_solver::eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
         double& f_bfgs, std::vector<double>& g_bfgs){
-        
         if (g_bfgs.size() != n_param){
             g_bfgs.resize(n_param);
-        } 
+        }
         this->G = g_bfgs.data();
-
         // Zero out stuff
         for (int i = 0; i < n_param; ++i){
             // Copy param value back from BFGS solver
@@ -73,7 +71,6 @@ namespace optimML{
             }
             dt_dx[i] = 0.0;
         }
-        
         if (nthread > 0){
             for (int t = 0; t < nthread; ++t){
                 dy_dp_thread[t] = 0.0;
@@ -89,13 +86,11 @@ namespace optimML{
                 dy_dt_extern[i] = 0.0;
             }
         }
-
         if (nmixcomp > 0 && has_prior_mixcomp){
             for (int i = 0; i < nmixcomp; ++i){
                 dy_dt_mixcomp_prior[i] = 0.0;
             }
         }
-
         // Un-transform variables and compute partial 1st and 2nd derivatives
         // wrt transformations
         
@@ -104,11 +99,10 @@ namespace optimML{
         // entries are zero
 
         // Handle all non-mixture component variables
-        map<int, double> grpsums;
+        pgsums.clear();
         for (int i = 0; i < n_param_grp; ++i){
-            grpsums.insert(make_pair(i, 0.0));
+            pgsums.insert(make_pair(i, 0.0));
         } 
-
         for (int i = 0; i < n_param-nmixcomp; ++i){
             if (this->trans_log[i]){
                 /*
@@ -144,7 +138,7 @@ namespace optimML{
                 }
                 */
                 x_t[i] = expit(x[i]);
-                grpsums[param2grp[i]] += x_t[i];
+                pgsums[param2grp[i]] += x_t[i];
             }
             else{
                 /*
@@ -168,11 +162,10 @@ namespace optimML{
                 x_t_extern[i] = x_t[i];
             }
         }
-
         for (map<int, int>::iterator pg = param2grp.begin(); pg != param2grp.end();
             ++pg){
             // Normalize each member of a sum-to-one group
-            x_t[pg->first] /= grpsums[pg->second];
+            x_t[pg->first] /= pgsums[pg->second];
             
             if (nthread > 0 && nmixcomp > 0){
                 for (int t = 0; t < nthread; ++t){
@@ -186,11 +179,10 @@ namespace optimML{
             double e_negx1 = exp(-x[pg->first]);
             double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
             double e_negx1_p1_3 = e_negx1_p1_2 * (e_negx1 + 1);
-            double der_comp1 = e_negx1 / (e_negx1_p1_2 * grpsums[pg->second]) - 
-                e_negx1 / (e_negx1_p1_3 * grpsums[pg->second] * grpsums[pg->second]);
+            double der_comp1 = e_negx1 / (e_negx1_p1_2 * pgsums[pg->second]) - 
+                e_negx1 / (e_negx1_p1_3 * pgsums[pg->second] * pgsums[pg->second]);
             dt_dx[pg->first] = der_comp1;
         }
-    
         // Handle all mixture component variables
         mixcompsum = 0.0;
 
@@ -207,11 +199,9 @@ namespace optimML{
         for (int i = n_param-nmixcomp; i < n_param; ++i){
             x_t[i] /= mixcompsum;
         }
-
         if (nthread > 0){
             launch_threads();
         }
-
         // Visit each data point
         double loglik = 0.0;
         for (int i = 0; i < n_data; ++i){
@@ -240,17 +230,14 @@ namespace optimML{
                 eval_dll_dx(i);
             }
         }
-        
         if (nthread > 0){
             close_pool();
             loglik += ll_threads;
         }
-
         // Let prior distributions contribute and wrap up calculations
         // at the end, independent of data
         loglik += eval_ll_x(-1);
         eval_dll_dx(-1);
-        
         // Make everything negative to reflect that we're minimizing instead of maximizing
         f_bfgs = -loglik;
         //for (int i = 0; i < n_param; ++i){

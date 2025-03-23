@@ -167,6 +167,7 @@ namespace optimML{
         d2ll_dx2 = dll2;
         has_2d = true;
         initialized = true;
+        has_any_param_grp_prior = false;
     }
 
     void multivar::init(vector<double> params_init, multivar_func ll,
@@ -182,6 +183,7 @@ namespace optimML{
         d2ll_dx2 = dummy_d2_func;
         has_2d = false;
         initialized = true;
+        has_any_param_grp_prior = false;
     }
     
     bool multivar::add_prior(int idx, prior_func ll,
@@ -193,6 +195,11 @@ namespace optimML{
         }
         if (idx >= n_param-nmixcomp){
             fprintf(stderr, "ERROR: index %d out of bounds\n", idx);
+            return false;
+        }
+        if (n_param_grp > 0 && param2grp.count(idx) > 0){
+            fprintf(stderr, "ERROR: you cannot add a prior to a variable that is \
+part of a param grp.\n");
             return false;
         }
         this->has_prior[idx] = true;
@@ -260,12 +267,20 @@ namespace optimML{
             }
         }
         int group_idx = this->n_param_grp;
+        vector<int> v;
+        this->grp2param.insert(make_pair(group_idx, v));
         for (int i = 0; i < pg.size(); ++i){
             int param_idx = this->x.size();
             this->param2grp.insert(make_pair(param_idx, group_idx));
+            this->grp2param[group_idx].push_back(param_idx);
             this->add_one_param(logit(pg[i] / tot));
         }
         this->n_param_grp++;
+        this->param_grp_has_prior.push_back(false);
+        vector<double> v2;
+        this->param_grp_prior.push_back(v2);
+        vector<double> v3;
+        this->dy_dt_param_grp_prior.push_back(v3);
         return true;
     }
 
@@ -403,6 +418,40 @@ namespace optimML{
     }
     
     /**
+     * If using parameter groups (that must sum to 1), allow the user to add a Dirichlet
+     * prior over components. 
+     */
+    bool multivar::add_param_grp_prior(int i, std::vector<double>& alphas){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (this->n_param_grp <= i || this->grp2param.count(i) == 0){
+            fprintf(stderr, "ERROR: attempting to add a prior for a non-existent param grp\n");
+            return false;
+        }
+        if (this->grp2param[i].size() != alphas.size()){
+            fprintf(stderr, "ERROR: size of prior (%ld) != size of param grp (%ld)\n",
+                alphas.size(), grp2param[i].size());
+                return false;
+        }
+        
+        this->param_grp_has_prior[i] = true;
+        if (this->param_grp_prior[i].size() > 0){
+            this->param_grp_prior[i].clear();
+        }
+        for (int x = 0; x < alphas.size(); ++x){
+            this->param_grp_prior[i].push_back(x);
+        }
+        this->dy_dt_param_grp_prior[i].clear();
+        for (int z = 0; z < alphas.size(); ++z){
+            dy_dt_param_grp_prior[i].push_back(0.0);
+        }
+        has_any_param_grp_prior = true;
+        return true;
+    } 
+
+    /**
      * If we are modeling mixture components, allow the user to add a Dirichlet prior
      * over mixture components. The parameters of the distribution should be provided
      * here.
@@ -455,11 +504,12 @@ namespace optimML{
         return true;
     }
 
-    void multivar::randomize_mixcomps(){
+    void multivar::randomize_mixcomps(bool invert){
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
             exit(1);
         }
+        
         if (has_prior_mixcomp){
             // Draw randomly from the prior Dirichlet distribution to obtain starting values.
             // Sample a Gamma variable for each alpha, then set proportion to each alpha / alpha_sum
@@ -560,6 +610,39 @@ namespace optimML{
         ll -= alphasum_neg;
         return ll;
     }
+    
+    double multivar::ll_param_grps_prior(){
+        
+        bool hasp = false;
+        for (int i = 0; i < n_param_grp; ++i){
+            if (!param_grp_has_prior[i]){
+                hasp = true;
+                break;
+            }
+        }
+        if (!hasp){
+            return 0.0;
+        }
+
+        double ll = 0.0;
+        double alphasum = 0.0;
+        double alphasum_neg = 0.0;
+        int intptr;
+        for (int i = 0; i < n_param_grp; ++i){
+            if (param_grp_has_prior[i]){
+                for (int j = 0; j < grp2param[i].size(); ++j){
+                    int k = grp2param[i][j];
+                    double x_i = x_t[k];
+                    ll += (param_grp_prior[i][j] - 1.0)*log(x_i);
+                    alphasum += param_grp_prior[i][j];
+                    alphasum_neg += lgamma_r(param_grp_prior[i][j], &intptr);
+                }
+            }
+        }
+        ll += lgamma_r(alphasum, &intptr);
+        ll -= alphasum_neg;
+        return ll;
+    }
 
     /**
      * Evaluate 1st derivative of optional Dirichlet prior on mixture components
@@ -574,6 +657,23 @@ namespace optimML{
             if (true){
                 double x_i = x_t[n_param-nmixcomp+i];
                 dy_dt_mixcomp_prior[i] = (dirichlet_prior_mixcomp[i] - 1.0)/x_i;
+            }
+        }
+    }
+    
+    void multivar::dll_param_grps_prior(){
+        if (!has_any_param_grp_prior){
+            return;
+        }
+        for (int i = 0; i < n_param_grp; ++i){
+            if (param_grp_has_prior[i]){
+                for (int j = 0; j < grp2param[i].size(); ++j){
+                    int k = grp2param[i][j];
+                    double x_i = x_t[k];
+                    if (x_i != 0.0){
+                        dy_dt_param_grp_prior[i][j] = (param_grp_prior[i][j] - 1.0)/x_i;
+                    }
+                }
             }
         }
     }
@@ -841,6 +941,9 @@ namespace optimML{
                 // Evaluate Dirichlet prior on mixture components
                 f_x += ll_mixcomp_prior();
             }
+            if (n_param_grp > 0 && has_any_param_grp_prior){
+                f_x += ll_param_grps_prior();
+            }
             // Let hooks do their thing
             for (int j = 0; j < this->ll_hooks.size(); ++j){
                 f_x += this->ll_hooks[j](this->ll_hooks_data_d[j],
@@ -1077,6 +1180,24 @@ namespace optimML{
                         
                         // TO DO: make sure this is right/test it
                         G[j2] -= dy_dt_mixcomp_prior[j] * der_comp1;
+                    }
+                }
+            }
+            if (n_param_grp > 0 && has_any_param_grp_prior){
+                dll_param_grps_prior();
+                for (int i = 0; i < n_param_grp; ++i){
+                    if (param_grp_has_prior[i]){
+                       for (int j = 0; j < grp2param[i].size(); ++j){
+                            int k = grp2param[i][j];
+                            double e_negx1 = exp(-x[k]);
+                            double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
+                            double e_negx1_p1_3 = e_negx1_p1_2 * (e_negx1 + 1);
+                            double der_comp1 = e_negx1 / (e_negx1_p1_2 * pgsums[i]) - 
+                                e_negx1 / (e_negx1_p1_3 * pgsums[i] * pgsums[i]);
+
+                            // TO DO: make sure this is correct
+                            G[k] -= dy_dt_param_grp_prior[i][j] * der_comp1;
+                       } 
                     }
                 }
             }
