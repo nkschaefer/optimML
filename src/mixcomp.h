@@ -35,7 +35,7 @@ namespace optimML{
         private: 
             
             // The object that will actually do all the work
-            multivar_ml_solver solver;
+            multivar_ml_solver* solver;
             
             // Preset functions
             
@@ -103,6 +103,7 @@ namespace optimML{
             mixcomp_solver(std::vector<std::vector<double> >& mixfracs,
                 std::string preset, std::vector<double>& data1, 
                 std::vector<double>& data2);
+            ~mixcomp_solver();
 
             bool add_mixcomp_fracs(std::vector<double>& fracs);
             void randomize_mixcomps();

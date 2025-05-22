@@ -56,6 +56,7 @@ namespace optimML{
      */
     const void multivar_ml_solver::eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
         double& f_bfgs, std::vector<double>& g_bfgs){
+        
         if (g_bfgs.size() != n_param){
             g_bfgs.resize(n_param);
         }
@@ -264,7 +265,7 @@ namespace optimML{
         dt_dx.clear();
         dy_dt.clear();
         dy_dt_prior.clear();
-         
+        
         for (int i = 0; i < n_param; ++i){
             // Gradient
             //G.push_back(0.0);
@@ -278,7 +279,6 @@ namespace optimML{
                 dy_dt_prior.push_back(1.0);
             }
         }
-        
         if (this->nthread > 0 && !threads_init){
             // Set up everything
             create_threads();
@@ -291,10 +291,8 @@ namespace optimML{
         
         STLBFGS::Optimizer opt{f, nthread_bfgs};
         opt.verbose = false;
-        
         opt.ftol = delta_thresh;
         opt.maxiter = maxiter;
-        
         std::vector<double> xcopy = x;
         double res = opt.run(xcopy);
         for (int i = 0; i < n_param; ++i){
