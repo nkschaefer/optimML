@@ -223,6 +223,19 @@ part of a param grp.\n");
         this->params_prior_double[idx].insert(make_pair(name, data));
         return true;
     }
+    
+    bool multivar::set_prior_param(int idx, string name, double data){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (this->params_prior_double.size() <= idx ||
+            this->params_prior_double[idx].count(name) == 0){
+            return false;
+        }
+        this->params_prior_double[idx][name] = data;
+        return true;
+    }
 
     bool multivar::add_prior_param(int idx, string name, int data){
         if (!initialized){
@@ -233,6 +246,19 @@ part of a param grp.\n");
         return true;
     }
     
+    bool multivar::set_prior_param(int idx, string name, int data){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (this->params_prior_int.size() <= idx ||
+            this->params_prior_int[idx].count(name) == 0){
+            return false;
+        }
+        this->params_prior_int[idx][name] = data;
+        return true;
+    }
+
     void multivar::add_likelihood_hook(ll_hook fun, vector<double>& data_d,
         vector<int>& data_i){
         this->ll_hooks.push_back(fun);
@@ -841,6 +867,9 @@ part of a param grp.\n");
      * When something goes wrong in function evaluation, send a message to stderr.
      */
     void multivar::print_function_error(int thread_idx){
+        if (silent){
+            return;
+        }
         fprintf(stderr, "parameters:\n");
         for (int i = 0; i < x_t_extern.size(); ++i){
             fprintf(stderr, "%d): %f\n", i, x_t_extern[i]);
@@ -874,6 +903,9 @@ part of a param grp.\n");
      * to stderr.
      */
     void multivar::print_function_error_prior(int idx){
+        if (silent){
+            return;
+        }
         fprintf(stderr, "parameter:\n");
         fprintf(stderr, "%d): %f\n", idx, x_t_extern[idx]);
         fprintf(stderr, "data:\n");
@@ -913,7 +945,9 @@ part of a param grp.\n");
                 ll = ll_x(x_t_extern, this->param_double_cur, this->param_int_cur);
             }
             if (isnan(ll) || isinf(ll)){
-                fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
+                if (!silent){
+                    fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
+                }
                 print_function_error(thread_idx);
                 throw optimML::OPTIMML_MATH_ERR;
             }
@@ -929,8 +963,10 @@ part of a param grp.\n");
                     double ll = ll_x_prior[j](x_t_extern[j], 
                         this->params_prior_double[j], this->params_prior_int[j]);
                     if (isnan(ll) || isinf(ll)){
-                        fprintf(stderr, "ERROR: illegal value returned by prior log likelihood function on \
+                        if (!silent){
+                            fprintf(stderr, "ERROR: illegal value returned by prior log likelihood function on \
     parameter %d\n", j);
+                        }
                         print_function_error_prior(j);
                         throw optimML::OPTIMML_MATH_ERR;
                     }
@@ -1064,7 +1100,9 @@ part of a param grp.\n");
                     }
                 }
                 if (err != -1){
-                    fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", err);
+                    if (!silent){
+                        fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", err);
+                    }
                     print_function_error(thread_idx);
                     throw optimML::OPTIMML_MATH_ERR;
                 }
@@ -1154,8 +1192,10 @@ part of a param grp.\n");
                         double dllprior = dll_dx_prior[j](x_t[j], this->params_prior_double[j], 
                             this->params_prior_int[j]);
                         if (isnan(dllprior) || isinf(dllprior)){
-                            fprintf(stderr, "ERROR: illegal value returned by prior gradient function on \
+                            if (!silent){
+                                fprintf(stderr, "ERROR: illegal value returned by prior gradient function on \
     parameter %d\n", j);
+                            }
                             print_function_error_prior(j); 
                             throw optimML::OPTIMML_MATH_ERR;
                         }
@@ -1234,8 +1274,10 @@ part of a param grp.\n");
             for (int j = 0; j < n_param_extern; ++j){
                 for (int k = 0; k < n_param_extern; ++k){
                     if (isnan(d2y_dt2_extern[j][k]) || isinf(d2y_dt2_extern[j][k])){
-                        fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function\n");
-                        fprintf(stderr, "parameters: %d %d\n", j, k);
+                        if (!silent){
+                            fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function\n");
+                            fprintf(stderr, "parameters: %d %d\n", j, k);
+                        }
                         print_function_error();
                         throw optimML::OPTIMML_MATH_ERR;
                     }
@@ -1351,8 +1393,10 @@ part of a param grp.\n");
                     double d2llprior = d2ll_dx2_prior[j](x_t[j], this->params_prior_double[j], 
                         this->params_prior_int[j]) * dt_dx[j] * dt_dx[j] + dy_dt_prior[j] * d2t_dx2[j][j]; 
                     if (isnan(d2llprior) || isinf(d2llprior)){
-                        fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function for prior \
+                        if (!silent){
+                            fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function for prior \
     on parameter %d\n", j);
+                        }
                         print_function_error_prior(j);
                         throw optimML::OPTIMML_MATH_ERR;
                     }

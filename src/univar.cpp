@@ -77,27 +77,31 @@ namespace optimML{
     }
     
     void univar::dump_cur_params(){
-        fprintf(stderr, "data:\n");
-        for (map<string, double>::iterator it = param_double_cur.begin(); it != 
-            param_double_cur.end(); ++it){
-            fprintf(stderr, "%s = %f\n", it->first.c_str(), it->second);
-        }
-        for (map<string, int>::iterator it = param_int_cur.begin(); it != 
-            param_int_cur.end(); ++it){
-            fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
+        if (!silent){
+            fprintf(stderr, "data:\n");
+            for (map<string, double>::iterator it = param_double_cur.begin(); it != 
+                param_double_cur.end(); ++it){
+                fprintf(stderr, "%s = %f\n", it->first.c_str(), it->second);
+            }
+            for (map<string, int>::iterator it = param_int_cur.begin(); it != 
+                param_int_cur.end(); ++it){
+                fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
+            }
         }
         throw optimML::OPTIMML_MATH_ERR; 
     }
     
     void univar::dump_prior_params(){
-        fprintf(stderr, "prior params:\n");
-        for (map<string, double>::iterator it = params_prior_double.begin(); it != 
-            params_prior_double.end(); ++it){
-            fprintf(stderr, "%s = %f\n", it->first.c_str(), it->second);
-        }
-        for (map<string, int>::iterator it = params_prior_int.begin(); it != 
-            params_prior_int.end(); ++it){
-            fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
+        if (!silent){
+            fprintf(stderr, "prior params:\n");
+            for (map<string, double>::iterator it = params_prior_double.begin(); it != 
+                params_prior_double.end(); ++it){
+                fprintf(stderr, "%s = %f\n", it->first.c_str(), it->second);
+            }
+            for (map<string, int>::iterator it = params_prior_int.begin(); it != 
+                params_prior_int.end(); ++it){
+                fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
+            }
         }
         throw optimML::OPTIMML_MATH_ERR;
     }
