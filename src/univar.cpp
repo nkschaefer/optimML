@@ -185,6 +185,9 @@ namespace optimML{
                         fprintf(stderr, "parameter: %f\n", x_t);
                         dump_cur_params(); 
                     }
+                    if (ll_data_points){
+                        data_ll[i] = y;
+                    }
                     cur_ll_x += y * w;
                 }
                 if (eval_dll_dx && this->has_dll_dx){

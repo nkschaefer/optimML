@@ -47,6 +47,7 @@ namespace optimML{
         threads_init = false;
         
         silent = false;
+        ll_data_points = false;
     }
     
     /**
@@ -66,8 +67,35 @@ namespace optimML{
             delete queue_mutex;
             delete has_jobs;
         }
+        if (ll_data_points){
+            data_ll.clear(); 
+        }
     }
     
+    void solver::store_ll_data_points(){
+        if (n_data > 0){
+            for (int i = 0; i < n_data; ++i){
+                data_ll.push_back(0.0);
+            }
+        }
+        ll_data_points = true;
+    }
+
+    void solver::store_ll_data_points(bool val){
+        if (!val){
+            if (ll_data_points){
+                data_ll.clear();
+            }
+        }
+        else{
+            if (n_data > 0){
+                for (int i = 0; i < n_data; ++i){
+                    data_ll.push_back(0.0);
+                }
+            }    
+        }
+        ll_data_points = val;
+    }
 
     /**
      * Helper for truncated normal LL calculations
@@ -199,6 +227,11 @@ namespace optimML{
             fprintf(stderr, "ERROR: already has data keyed to %s\n", name.c_str());
             return false;
         }
+        if (ll_data_points && n_data == 0){
+            for (int i = 0; i < nd; ++i){
+                data_ll.push_back(0.0);
+            }
+        }
         this->n_data = nd;
         
         this->params_double_names.push_back(name);
@@ -231,6 +264,11 @@ namespace optimML{
             fprintf(stderr, "ERROR: already has data keyed to %s\n", name.c_str());
             return false;
         }
+        if (ll_data_points && n_data == 0){
+            for (int i = 0; i < nd; ++i){
+                data_ll.push_back(0.0);
+            }
+        }
         this->n_data = nd;
         this->params_int_names.push_back(name);
         this->params_int_vals.push_back(dat.data());
@@ -245,7 +283,11 @@ namespace optimML{
         }
         return true;
     }
-    
+   
+    int solver::get_n_data(){
+        return n_data;
+    }
+
     bool solver::add_data_fixed(string name, double dat){
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
@@ -290,7 +332,7 @@ namespace optimML{
         if (this->n_data == 0){
 
             vector<string> dat_d_names;
-            
+                
             // Everything in param_double_cur and param_int_cur must have come from fixed data.
             for (map<string, double>::iterator c = param_double_cur.begin(); c !=
                 param_double_cur.end(); ){
@@ -462,6 +504,21 @@ namespace optimML{
             return false;
         } 
         this->weights = weights;
+        return true;
+    }
+    
+    bool solver::update_weights(std::vector<double>& weights){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (n_data > 0 && weights.size() != this->n_data){
+            fprintf(stderr, "ERROR: weight vector not same length as data\n");
+            return false;
+        }
+        for (int i = 0; i < n_data; ++i){
+            this->weights[i] = weights[i];
+        }
         return true;
     }
 

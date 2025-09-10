@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <deque>
 #include <iterator>
 #include <string.h>
 #include <stdio.h>
@@ -11,6 +12,7 @@
 #include <functional>
 #include <fstream>
 #include <sstream>
+#include <memory>
 #include <map>
 #include <unordered_map>
 #include <set>
@@ -217,7 +219,10 @@ namespace optimML{
 
             const void eval_funcs_bfgs(const std::vector<double>& x, 
                 double& y, std::vector<double>& grad);
-        
+            
+            // Transform parameters for function evaluation
+            void transform_vars();
+
             // Evaluate log likelihood at a given parameter value 
             double eval_ll_x(int i, int thread_idx=-1);       
             
@@ -239,18 +244,29 @@ namespace optimML{
             
             std::vector<double> dy_dp_thread;
             std::vector<std::vector<double> > dy_dt_extern_thread;
+
             // This is only needed because the last element (mixcomp combination)
             // can change row to row
             std::vector<std::vector<double> > x_t_extern_thread;
             std::vector<double> mixcompsum_f_thread;
             
             double ll_threads; 
-            std::mutex* ll_mutex;
-            std::vector<std::mutex*> G_mutex;
             
+            // Mutexes are not copyable - so these must be pointers in order to be copyable.
+            std::mutex ll_mutex;
+            std::deque<std::mutex> G_mutex;
+
+            //std::unique_ptr<std::mutex> ll_mutex;
+            //std::deque<std::unique_ptr<std::mutex> > G_mutex;
+            //std::mutex* ll_mutex;
+            //std::deque<std::mutex*> G_mutex;
+            //std::mutex** G_mutex;
+
             void create_threads();
             void launch_threads();
             void worker(int thread_idx) override;
+            
+            void cpy(const multivar& m);
 
         public:
             

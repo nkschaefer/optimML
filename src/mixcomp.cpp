@@ -190,12 +190,12 @@ namespace optimML{
     mixcomp_solver::mixcomp_solver(vector<vector<double> >& mixfracs, 
         string preset, vector<double>& data){
         if (preset == "ls" || preset == "LS" || preset == "lstsq"){
-            solver = multivar_ml_solver({}, y_ls, dy_dx_ls);
-            solver.add_data("y", data);       
-            solver.add_mixcomp(mixfracs);
+            solver = new multivar_ml_solver({}, y_ls, dy_dx_ls);
+            solver->add_data("y", data);       
+            solver->add_mixcomp(mixfracs);
         }
         else{
-            solver = multivar_ml_solver({}, y_ls, dy_dx_ls);
+            solver = new multivar_ml_solver({}, y_ls, dy_dx_ls);
             fprintf(stderr, "ERROR: preset %s not recognized or requires additional data\n", preset.c_str());
             exit(1);
         }
@@ -206,68 +206,72 @@ namespace optimML{
         
         if (preset == "normal" || preset == "Normal" || preset == "gaussian" ||
             preset == "Gaussian" || preset == "norm" || preset == "gauss"){
-            solver = multivar_ml_solver({}, y_norm, dy_dx_norm);
-            solver.add_data("mu", data1);
-            solver.add_data("sigma", data2);
-            solver.add_mixcomp(mixfracs);
+            solver = new multivar_ml_solver({}, y_norm, dy_dx_norm);
+            solver->add_data("mu", data1);
+            solver->add_data("sigma", data2);
+            solver->add_mixcomp(mixfracs);
             return;
         }
         else if (preset == "beta" || preset == "Beta"){
-            solver = multivar_ml_solver({}, y_beta, dy_dx_beta);
-            solver.add_data("alpha", data1);
-            solver.add_data("beta", data2);
-            solver.add_mixcomp(mixfracs);
+            solver = new multivar_ml_solver({}, y_beta, dy_dx_beta);
+            solver->add_data("alpha", data1);
+            solver->add_data("beta", data2);
+            solver->add_mixcomp(mixfracs);
             return;
         }
         else if (preset == "binom" || preset == "binomial" || preset == "Binomial"){
-            solver = multivar_ml_solver({}, y_binom, dy_dx_binom);
-            solver.add_data("n", data1);
-            solver.add_data("k", data2);
-            solver.add_mixcomp(mixfracs);
+            solver = new multivar_ml_solver({}, y_binom, dy_dx_binom);
+            solver->add_data("n", data1);
+            solver->add_data("k", data2);
+            solver->add_mixcomp(mixfracs);
             return;
         }
         // This line is only here because we're required to initialize
-        solver = multivar_ml_solver({}, y_norm, dy_dx_norm);
+        solver = new multivar_ml_solver({}, y_norm, dy_dx_norm);
         fprintf(stderr, "ERROR: preset string %s does not match a known preset, or you have\n", preset.c_str());
         fprintf(stderr, "provided the wrong number of input data variables\n");
         exit(1);
     }
+    
+    mixcomp_solver::~mixcomp_solver(){
+        delete solver;
+    }
 
     bool mixcomp_solver::add_mixcomp_fracs(vector<double>& fracs){
-        return solver.add_mixcomp_fracs(fracs);
+        return solver->add_mixcomp_fracs(fracs);
     }
 
     void mixcomp_solver::randomize_mixcomps(){
-        solver.randomize_mixcomps();
+        solver->randomize_mixcomps();
     }
 
     bool mixcomp_solver::add_mixcomp_prior(vector<double>& alphas){
-        return solver.add_mixcomp_prior(alphas);
+        return solver->add_mixcomp_prior(alphas);
     }
 
     void mixcomp_solver::set_delta(double d){
-        solver.set_delta(d);
+        solver->set_delta(d);
     }
 
     void mixcomp_solver::set_maxiter(int i){
-        solver.set_maxiter(i);
+        solver->set_maxiter(i);
     }
     
     void mixcomp_solver::set_threads(int nt){
-        solver.set_threads(nt);
+        solver->set_threads(nt);
     }
     
     void mixcomp_solver::set_threads_bfgs(int nt){
-        solver.set_bfgs_threads(nt);
+        solver->set_bfgs_threads(nt);
     }
 
     bool mixcomp_solver::solve(){
-        bool success = solver.solve();
+        bool success = solver->solve();
         results.clear();
-        for (int i = 0; i < solver.results_mixcomp.size(); ++i){
-            results.push_back(solver.results_mixcomp[i]);
+        for (int i = 0; i < solver->results_mixcomp.size(); ++i){
+            results.push_back(solver->results_mixcomp[i]);
         }
-        log_likelihood = solver.log_likelihood;
+        log_likelihood = solver->log_likelihood;
         return success;
     }
 }

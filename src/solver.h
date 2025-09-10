@@ -114,6 +114,9 @@ namespace optimML{
             
             bool fixed_data_dumped;
             
+            // If true, store the current log likelihood of each observation in a public vector
+            bool ll_data_points;
+             
             // ----- Multithreading-related
 
             int nthread;
@@ -144,21 +147,26 @@ namespace optimML{
             
             solver();
             ~solver();
+            
+            std::vector<double> data_ll;
+            
+            void store_ll_data_points();
+            void store_ll_data_points(bool val);
 
             bool add_data(std::string name, std::vector<double>& data);
             bool add_data(std::string name, std::vector<int>& data);
-            //bool add_data(std::string name, std::map<int, double>& data, int ndata);
-            //bool add_data(std::string name, std::map<int, int>& data, int ndata);
             bool add_data_fixed(std::string name, double data);
             bool add_data_fixed(std::string name, int data);
             
             bool add_weights(std::vector<double>& weights);
-            
+            bool update_weights(std::vector<double>& weights);
+
             void set_delta(double delt);
             void set_maxiter(int i);   
             void set_threads(int nt);
             
             void set_silent(bool s);
+            int get_n_data();
 
             double log_likelihood;
     };

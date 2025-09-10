@@ -9,6 +9,7 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <memory>
 #include <set>
 #include <functional>
 #include <cstdlib>
@@ -56,8 +57,101 @@ namespace optimML{
         nthread = 0;    
         initialized = false;
         threads_init = false;
+        
+        //ll_mutex = NULL;
     }
-   
+    
+    void multivar::cpy(const multivar& m){
+        this->n_param = m.n_param;
+        this->n_param_extern = m.n_param_extern;
+        this->x = m.x;
+        this->x_t = m.x_t;
+        this->x_t_extern = m.x_t_extern;
+        this->n_param_grp = m.n_param_grp;
+        this->param2grp = m.param2grp;
+        this->grp2param = m.grp2param;
+        this->param_grp_prior = m.param_grp_prior;
+        this->param_grp_has_prior = m.param_grp_has_prior;
+        this->params_prior_double = m.params_prior_double;
+        this->params_prior_int = m.params_prior_int;
+        this->ll_x_prior = m.ll_x_prior;
+        this->dll_dx_prior = m.dll_dx_prior;
+        this->d2ll_dx2_prior = m.d2ll_dx2_prior;
+        this->ll_hooks = m.ll_hooks;
+        this->ll_hooks_data_d = m.ll_hooks_data_d;
+        this->ll_hooks_data_i = m.ll_hooks_data_i;
+        this->dll_hooks = m.dll_hooks;
+        this->dll_hooks_data_d = m.dll_hooks_data_d;
+        this->dll_hooks_data_i = m.dll_hooks_data_i;
+        this->dy_dt_extern = m.dy_dt_extern;
+        this->d2y_dt2_extern = m.d2y_dt2_extern;
+        this->dt_dx = m.dt_dx;
+        this->d2t_dx2 = m.d2t_dx2;
+        this->d2y_dpdt = m.d2y_dpdt;
+        this->d2y_dtdp = m.d2y_dtdp;
+        this->dy_dp = m.dy_dp;
+        this->d2y_dp2 = m.d2y_dp2;
+        this->dy_dt = m.dy_dt;
+        this->dy_dt_prior = m.dy_dt_prior;
+        
+        /* 
+        if (m.G != NULL){
+        }
+        else{
+            this->G = NULL;
+        }
+        */
+
+        this->H = m.H;
+        this->ll_x = m.ll_x;
+        this->dll_dx = m.dll_dx;
+        this->d2ll_dx2 = m.d2ll_dx2;
+        this->has_2d = m.has_2d;
+        this->has_prior = m.has_prior;
+        this->has_prior_mixcomp = m.has_prior_mixcomp;
+        this->dirichlet_prior_mixcomp = m.dirichlet_prior_mixcomp;
+        this->dy_dt_mixcomp_prior = m.dy_dt_mixcomp_prior;
+        this->d2y_dt2_mixcomp_prior = m.d2y_dt2_mixcomp_prior;
+        this->xval_max = m.xval_max;
+        this->xval_min = m.xval_min;
+        this->xval_log_min = m.xval_log_min;
+        this->xval_log_max = m.xval_log_max;
+        this->xval_logit_min = m.xval_logit_min;
+        this->xval_logit_max = m.xval_logit_max;
+        this->x_skip = m.x_skip;
+        this->trans_log = m.trans_log;
+        this->trans_logit = m.trans_logit;
+        this->nmixcomp = m.nmixcomp;
+        this->mixcompfracs = m.mixcompfracs;
+        this->mixcompfracs_sparse = m.mixcompfracs_sparse;
+        this->mixcomp_p = m.mixcomp_p;
+        this->mixcompsum = m.mixcompsum;
+        this->mixcompsum_f = m.mixcompsum_f;
+        this->mixcompsum_2 = m.mixcompsum_2;
+        this->mixcompsum_3 = m.mixcompsum_3;
+        this->pgsums = m.pgsums;
+        this->dy_dp_thread = m.dy_dp_thread;
+        this->dy_dt_extern_thread = m.dy_dt_extern_thread;
+        this->x_t_extern_thread = m.x_t_extern_thread;
+        this->mixcompsum_f_thread = m.mixcompsum_f_thread;
+        this->ll_threads = m.ll_threads;
+        /*
+        for (int i = 0; i < G_mutex.size(); ++i){
+            delete this->G_mutex[i];
+        }
+        G_mutex.clear();
+        for (int i = 0; i < m.G_mutex.size(); ++i){
+            this->G_mutex.push_back(new mutex);
+        }
+        */
+        //delete this->ll_mutex;
+        //this->ll_mutex = new mutex;
+
+        this->results = m.results;
+        this->results_mixcomp = m.results_mixcomp;
+        this->se = m.se;
+    }
+
     multivar::~multivar(){
         this->x.clear();
         this->x_t.clear();
@@ -65,7 +159,6 @@ namespace optimML{
         //this->G.clear();
         this->results.clear();
         this->results_mixcomp.clear();
-
         this->mixcompfracs_sparse.clear();
         this->params_double_cur_thread.clear();
         this->params_int_cur_thread.clear();
@@ -75,13 +168,25 @@ namespace optimML{
         this->dy_dt_extern_thread.clear();
         this->x_t_extern_thread.clear();
         this->mixcompsum_f_thread.clear();
-        for (int i = 0; i < nthread; ++i){
-            delete G_mutex[i];
-        }
         G_mutex.clear();
-        if (nthread > 0){
-            delete ll_mutex;
+        /*
+        for (int i = 0; i < n_param; ++i){
+            fprintf(stderr, "D %d %d\n", i, n_param);
+            if (G_mutex[i] != NULL){
+                //delete G_mutex[i];
+                //G_mutex[i] = NULL;
+            }
         }
+        fprintf(stderr, "D\n");
+        //delete[] G_mutex;
+        if (nthread > 0){
+            if (ll_mutex != NULL){
+                //delete ll_mutex;
+                ll_mutex = NULL;
+            }
+        }
+        fprintf(stderr, "destruct2\n");
+        */
     } 
 
     void multivar::add_one_param(double param){
@@ -90,7 +195,6 @@ namespace optimML{
         x_t_extern.push_back(param);
         x_skip.push_back(false);
         dy_dt_extern.push_back(0.0);
-
         /*
         vector<double> d2y_dt2_row;
         for (int j = 0; j < params_init.size(); ++j){
@@ -951,6 +1055,9 @@ part of a param grp.\n");
                 print_function_error(thread_idx);
                 throw optimML::OPTIMML_MATH_ERR;
             }
+            if (ll_data_points){
+                data_ll[i] = ll;
+            }
             if (this->weights.size() > 0){
                 ll *= this->weights[i];
             }
@@ -988,14 +1095,8 @@ part of a param grp.\n");
         }
         return f_x;
     }
-
-    /**
-     * Evaluate the log likelihood function across every current data point.
-     */
-    double multivar::eval_ll_all(){
-
-        double loglik = 0.0;
-        
+    
+    void multivar::transform_vars(){
         map<int, double> grpsums;
         for (int i = 0; i < n_param_grp; ++i){
             grpsums.insert(make_pair(i, 0.0));
@@ -1033,6 +1134,16 @@ part of a param grp.\n");
         for (int i = n_param-nmixcomp; i < n_param; ++i){
             x_t[i] /= mixcompsum;
         }
+    }
+
+    /**
+     * Evaluate the log likelihood function across every current data point.
+     */
+    double multivar::eval_ll_all(){
+
+        double loglik = 0.0;
+        
+        transform_vars(); 
         
         for (int i = 0; i < n_data; ++i){
 
@@ -1050,7 +1161,14 @@ part of a param grp.\n");
             }
             
             // Evaluate functions
-            loglik += eval_ll_x(i);
+            double ll = eval_ll_x(i);
+            if (ll_data_points){
+                data_ll[i] = ll;
+            }
+            if (this->weights.size() > 0){
+                ll *= this->weights[i];
+            }
+            loglik += ll;
         }
         loglik += eval_ll_x(-1);
         return loglik;
@@ -1127,7 +1245,7 @@ part of a param grp.\n");
                     }
                     else{
                         if (thread_idx >= 0){
-                            unique_lock<mutex> lock(*G_mutex[j]);
+                            unique_lock<mutex> lock(G_mutex[j]);
                             // Subtract instead of add - since BFGS seeks to minimize instead
                             // of maximize
                             G[j] -= (dy_dt_extern_thread[thread_idx][j] * w * dt_dx[j]);
@@ -1167,7 +1285,7 @@ part of a param grp.\n");
                             (this->mixcompfracs_sparse[i][j] - mf/mixcompsum);
                         
                         if (thread_idx >= 0){
-                            unique_lock<mutex> lock(*G_mutex[n_param-nmixcomp+j]);
+                            unique_lock<mutex> lock(G_mutex[n_param-nmixcomp+j]);
 
                             //dt_dx[n_param-nmixcomp+j] = val;
                             G[n_param-nmixcomp+j] -= (dy_dp * val);
@@ -1440,6 +1558,8 @@ part of a param grp.\n");
         // Set up data stuff for threads
         solver::create_threads();
         
+        //this->G_mutex = new mutex*[n_param];
+        
         // Create a distinct data set per thread
         for (int i = 0; i < nthread; ++i){
             dy_dp_thread.push_back(0.0);
@@ -1451,9 +1571,14 @@ part of a param grp.\n");
             dy_dt_extern_thread.push_back(dy_dt_row);
 
             for (int j = 0; j < n_param; ++j){
-                mutex* m = new mutex;
-                G_mutex.push_back(m);
-            } 
+                G_mutex.emplace_back();
+                //G_mutex.emplace_back(unique_ptr<mutex>(new mutex));
+                //G_mutex.emplace_back(make_unique<mutex>());
+                //G_mutex[j] = new mutex;
+                //mutex* m = new mutex;
+                //G_mutex.push_back(m);
+            }
+
 
             if (nmixcomp > 0){
                 mixcompsum_f_thread.push_back(0.0);
@@ -1462,7 +1587,7 @@ part of a param grp.\n");
             }
 
         } 
-        ll_mutex = new mutex;
+        //ll_mutex = unique_ptr<mutex>(new mutex);
         threads_init = true;
     }
     
@@ -1501,7 +1626,7 @@ part of a param grp.\n");
             double loglik = eval_ll_x(jid, thread_idx);
             eval_dll_dx(jid, thread_idx);
 
-            unique_lock<mutex> lock(*ll_mutex);
+            unique_lock<mutex> lock(ll_mutex);
             ll_threads += loglik;
         }
     }
