@@ -1259,7 +1259,13 @@ part of a param grp.\n");
                 }
             }
             if (nmixcomp > 0){
-                double p = x_t_extern[x_t_extern.size()-1];
+                double p;
+                if (thread_idx >= 0){
+                    p = x_t_extern_thread[thread_idx][x_t_extern_thread[thread_idx].size()-1];
+                }
+                else{
+                    p = x_t_extern[x_t_extern.size()-1];
+                }
                 for (int j = 0; j < nmixcomp; ++j){
                     if (false){
                     //if (x_skip[n_param-nmixcomp+j]){
@@ -1288,7 +1294,7 @@ part of a param grp.\n");
                             unique_lock<mutex> lock(G_mutex[n_param-nmixcomp+j]);
 
                             //dt_dx[n_param-nmixcomp+j] = val;
-                            G[n_param-nmixcomp+j] -= (dy_dp * val);
+                            G[n_param-nmixcomp+j] -= (dy_dp_thread[thread_idx] * val);
                         }
                         else{
                             //dt_dx[n_param-nmixcomp+j] = val;
@@ -1621,6 +1627,7 @@ part of a param grp.\n");
                     mixcompsum_f += mixcompfracs_sparse[jid][k] / (exp(-x[k]) + 1);
                 }
                 x_t_extern_thread[thread_idx][x_t_extern.size()-1] = p;
+                mixcompsum_f_thread[thread_idx] = mixcompsum_f;
             }
             
             double loglik = eval_ll_x(jid, thread_idx);
