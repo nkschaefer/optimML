@@ -1629,7 +1629,6 @@ part of a param grp.\n");
                 x_t_extern_thread[thread_idx][x_t_extern.size()-1] = p;
                 mixcompsum_f_thread[thread_idx] = mixcompsum_f;
             }
-            
             double loglik = eval_ll_x(jid, thread_idx);
             eval_dll_dx(jid, thread_idx);
 
