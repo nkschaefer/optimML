@@ -292,6 +292,9 @@ namespace optimML{
             bool add_prior_param(int idx, std::string name, double data);
             bool add_prior_param(int idx, std::string name, int data);
             
+            bool set_prior_param(int idx, std::string name, double data);
+            bool set_prior_param(int idx, std::string name, int data);
+
             void add_likelihood_hook(ll_hook fun, std::vector<double>& ddat,
                 std::vector<int>& idat);
             void add_gradient_hook(dll_hook fun, std::vector<double>& ddat, 

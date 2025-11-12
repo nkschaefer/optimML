@@ -46,6 +46,7 @@ namespace optimML{
         pool_open = false;
         threads_init = false;
         
+        silent = false;
         ll_data_points = false;
     }
     
@@ -549,6 +550,10 @@ namespace optimML{
         nthread = nt;
     }
     
+    void solver::set_silent(bool s){
+        silent = s;    
+    }
+
     void solver::prepare_data(int i, int thread_idx){
         // Update parameter maps that will be sent to functions
         if (threads_init && thread_idx >= 0){

@@ -139,6 +139,9 @@ namespace optimML{
             int get_next_job();
             virtual void worker(int thread_idx);
             void close_pool();
+            
+            // Set to true to suppress math error messages
+            bool silent; 
 
         public:
             
@@ -162,6 +165,7 @@ namespace optimML{
             void set_maxiter(int i);   
             void set_threads(int nt);
             
+            void set_silent(bool s);
             int get_n_data();
 
             double log_likelihood;
