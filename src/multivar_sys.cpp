@@ -416,7 +416,7 @@ namespace optimML{
             }
         }
 
-        this->solver.set_delta(1e-6);
+        this->solver.set_delta(1e-8);
         
         // Add data
         this->solver.add_weights(this->weights);

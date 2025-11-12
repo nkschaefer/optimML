@@ -315,7 +315,10 @@ part of a param grp.\n");
 
     bool multivar::add_prior(int idx, prior_func ll,
         prior_func dll){
-        
+        if (idx >= n_param-nmixcomp){
+            fprintf(stderr, "ERROR: invalid param idx\n");
+            return false;
+        }
         return add_prior(idx, ll, dll, dummy_prior_func);
     }
 
@@ -323,6 +326,10 @@ part of a param grp.\n");
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
             exit(1);
+        }
+        if (idx >= n_param-nmixcomp){
+            fprintf(stderr, "ERROR: invalid param idx\n");
+            return false;
         }
         this->params_prior_double[idx].insert(make_pair(name, data));
         return true;
@@ -332,6 +339,10 @@ part of a param grp.\n");
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
             exit(1);
+        }
+        if (idx >= n_param-nmixcomp){
+            fprintf(stderr, "ERROR: invalid param idx\n");
+            return false;
         }
         this->params_prior_int[idx].insert(make_pair(name, data));
         return true;
@@ -894,6 +905,10 @@ part of a param grp.\n");
             fprintf(stderr, "ERROR: not initialized\n");
             exit(1);
         }
+        if (idx >= n_param-nmixcomp){
+            fprintf(stderr, "ERROR: param idx out of bounds\n");
+            exit(1);
+        }
         // Un-transform if necessary
         if (this->trans_log[idx]){
             return;
@@ -918,6 +933,10 @@ part of a param grp.\n");
     void multivar::constrain_01(int idx){
         if (!initialized){
             fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (idx >= n_param-nmixcomp){
+            fprintf(stderr, "ERROR: param idx out of bounds\n");
             exit(1);
         }
         // Un-transform if necessary

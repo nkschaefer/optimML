@@ -239,6 +239,7 @@ namespace optimML{
         // at the end, independent of data
         loglik += eval_ll_x(-1);
         eval_dll_dx(-1);
+
         // Make everything negative to reflect that we're minimizing instead of maximizing
         f_bfgs = -loglik;
         //for (int i = 0; i < n_param; ++i){

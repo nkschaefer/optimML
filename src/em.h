@@ -42,6 +42,8 @@ namespace optimML{
             std::vector<double> params; 
             std::vector<double> params_extern;
             std::vector<double> params_orig;
+            
+            bool penent;
 
             int n_params;
             std::deque<multivar_ml_solver* > solvers;
@@ -107,7 +109,7 @@ namespace optimML{
 
             // Parameter values at optimum
             std::vector<double> results;
-
+            
             // Responsibility matrix / obs-component weights
             double** responsibility_matrix;
 
@@ -119,6 +121,8 @@ namespace optimML{
                 std::string s);
             
             bool rm_component(int ci);
+            
+            void reset_params();
 
             // Add data key/val to go with most recently-added equation
             bool add_data(std::string name, std::vector<double>& dat);
@@ -148,6 +152,9 @@ namespace optimML{
             void add_weights(std::vector<double>& w);
             
             void set_delta(double d);
+            
+            void penalize_entropy();
+            void penalize_entropy(bool pe);
 
             void init();
 

@@ -49,6 +49,7 @@ namespace optimML{
         n_components = 0;
         n_params = 0;
 
+        this->is_fit = false;
         // Make room for temporary storage of equation gradients
         for (int i = 0; i < params_init.size(); ++i){
             this->add_one_param(params_init[i]);
@@ -64,7 +65,7 @@ namespace optimML{
         this->no_data_yet = true;
         this->solver_global = NULL;
         this->weightsum = 0.0;
-        this->is_fit = false;
+        this->penent = false;
     }
     
     em_solver::em_solver(){
@@ -81,6 +82,7 @@ namespace optimML{
         this->solver_global = NULL;
         this->weightsum = 0.0;
         this->is_fit = false;
+        this->penent = false;
     }
     
     em_solver::~em_solver(){
@@ -120,6 +122,14 @@ namespace optimML{
             }
             solver_global->set_maxiter(m);
         }
+    }
+    
+    void em_solver::penalize_entropy(){
+        penent = true;
+    }
+
+    void em_solver::penalize_entropy(bool pe){
+        penent = pe;
     }
 
     void em_solver::init_responsibility_matrix(int n_obs){
@@ -446,6 +456,177 @@ namespace optimML{
         }
         return solver_global->add_poisson_prior(idx, lambda);
     }
+    
+/**
+ * Log likelihood of dirichlet distribution
+ *
+ * Format expected by optimML::multivar_ml_solver for finding MLE parameters
+ */
+double ll_dirichlet(const vector<double>& params,
+    const map<string, double>& data_d,
+    const map<string, int>& data_i){
+   
+    char buf[30];
+    string bufstr;
+    double term1 = 0.0;
+    double term2 = 0.0;
+    double term3 = 0.0;
+    
+    int signp;
+    for (int i = 0; i < params.size(); ++i){
+        sprintf(&buf[0], "f_%d", i);
+        bufstr = buf;
+        double f = data_d.at(bufstr);
+        term1 += params[i];
+        term2 += lgammaf_r(params[i], &signp);
+        term3 += (params[i] - 1.0)*log(f);
+    }
+    
+    return lgammaf_r(term1, &signp) - term2 + term3;
+}
+
+    void em_solver::E_penent_aux(vector<double>& x, vector<double>& f, vector<double>& g){
+        // F: -(log likelihood - entropy)
+        
+        static vector<double> x_t(x.size());
+        static vector<double> dt_dx(x.size());
+        static vector<double> gradient_ll(x.size());
+        static vector<double> gradient_entropy(x.size());
+
+        // First, un-transform variables
+        double sum = 0.0;
+        for (int i = 0; i < x.size(); ++i){
+            x_t[i] = expit(x[i]);
+            dt_dx[i] = 0.0;
+            gradient_ll[i] = 0.0;
+            gradient_entropy[i] = 0.0;
+            g[i] = 0.0;
+            sum += x_t[i];
+        }
+
+        double entropy = 0.0;
+
+        for (int i = 0; i < x.size(); ++i){
+            x_t[i] /= sum;
+
+            // Handle derivatives of sum-to-one groups
+            double e_negx1 = exp(-x[i]);
+            double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
+            double e_negx1_p1_3 = e_negx1_p1_2 * (e_negx1 + 1);
+            double der_comp1 = e_negx1 / (e_negx1_p1_2 * sum) - 
+                e_negx1 / (e_negx1_p1_3 * sum * sum);
+            dt_dx[i] = der_comp1;
+        
+            double lx = log(x_t[i]);
+            entropy -= x_t[i] * lx;
+            gradient_entropy[i] -= (lx + 1.0);
+        }
+    
+        int signp;
+        
+        double ll = 0.0;
+        double entropy = 0.0;
+
+        // Now calculate log likelihood, entropy, and gradient contributions
+        for (int i = 0; i < n_obs; ++i){
+            double w = component_weights[i];
+            // This row can be thought of as a draw from a Dirichlet distribution.
+            double term1 = 0.0;
+            double term2 = 0.0;
+            double term3 = 0.0;
+            int k = 0;
+            for (int j = 0; j < n_components; ++j){
+                if (component_weights[j] > 0.0){
+                    // Contributions to Dirichlet log likelihood
+                    term1 += x_t[k];
+                    term2 += lgammaf_r(x_t[k], &signp);
+                    double lr = log(responsibility_matrix[i][j]);
+                    term3 += (x_t[k] - 1.0)*lr;
+
+                    // Contribution to entropy
+                    entropy -= responsibility_matrix[i][j] * lr;
+                    
+                    // Contribution to log likelihood gradient
+                    
+
+                    // Contribution to entropy gradient
+                    gradient_entropy[k] += lr + 1.0;
+                    k++;
+                }
+            }
+            // Add contribution of this row to log likelihood
+            ll += (lgammaf_r(term1, &signp) - term2 + term3);
+        }
+
+    }
+
+    void em_solver::E_step_penent(){
+        if (n_obs == -1 || responsibility_matrix == NULL){
+            // Learn how many data points
+            int nd = solver_global->get_n_data();
+            init_responsibility_matrix(nd);
+        }
+        
+        for (int j = 0; j < n_components; ++j){
+            if (component_weights[j] > 0){
+                // Compute log likelihood of each observation under this model
+                solvers[j]->eval_ll_all();
+            }
+        }
+        
+        double epsilon = 1e-9;
+         
+        // Fill in responsibility matrix & weight matrix
+        for (int i = 0; i < n_obs; ++i){
+            if (weights_global.size() > 0 && weights_global[i] == 0.0){
+                continue;
+            }
+            double rowmax = 0;
+            for (int j = 0; j < n_components; ++j){
+                if (component_weights[j] > 0.0){
+                    double ll = solvers[j]->data_ll[i] + log_component_weights[j];
+                    //double ll = solvers[j]->data_ll[i];
+                    if (ll > rowmax){
+                        rowmax = ll;
+                    }
+                }
+            }
+            double rowsum = 0.0;
+            for (int j = 0; j < n_components; ++j){
+                if (component_weights[j] > 0.0){
+                    rowsum += exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowmax);
+                    //rowsum += exp(solvers[j]->data_ll[i] - rowmax);
+                }
+            }
+            if (rowsum == 0.0){
+                rowsum = 1.0;
+            }
+            rowsum = log(rowsum) + rowmax;
+            for (int j = 0; j < n_components; ++j){
+                if (component_weights[j] == 0.0){
+                    responsibility_matrix[i][j] = 0.0;
+                }
+                else{
+                    responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowsum);
+                    //responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] - rowsum);
+                    double w = 1.0;
+                    if (weights_global.size() > 0){
+                        w = weights_global[i];
+                    }
+                }
+            }
+        }
+       
+        // Now we can solve
+
+         
+        // Update weights of components
+        for (int j = 0; j < n_components; ++j){
+            component_weights[j] = (compsums[j] + 0.01)/(cstot + (double)n_components*(0.01));
+            //component_weights[j] = compsums[j] / cstot;
+            log_component_weights[j] = log(component_weights[j]);
+        }
+    }
 
     void em_solver::E_step(){
         if (n_obs == -1 || responsibility_matrix == NULL){
@@ -478,8 +659,8 @@ namespace optimML{
             double rowmax = 0;
             for (int j = 0; j < n_components; ++j){
                 if (component_weights[j] > 0.0){
-                    //double ll = solvers[j]->data_ll[i] + log_component_weights[j];
-                    double ll = solvers[j]->data_ll[i];
+                    double ll = solvers[j]->data_ll[i] + log_component_weights[j];
+                    //double ll = solvers[j]->data_ll[i];
                     if (ll > rowmax){
                         rowmax = ll;
                     }
@@ -488,8 +669,8 @@ namespace optimML{
             double rowsum = 0.0;
             for (int j = 0; j < n_components; ++j){
                 if (component_weights[j] > 0.0){
-                    //rowsum += exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowmax);
-                    rowsum += exp(solvers[j]->data_ll[i] - rowmax);
+                    rowsum += exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowmax);
+                    //rowsum += exp(solvers[j]->data_ll[i] - rowmax);
                 }
             }
             if (rowsum == 0.0){
@@ -501,8 +682,8 @@ namespace optimML{
                     responsibility_matrix[i][j] = 0.0;
                 }
                 else{
-                    //responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowsum);
-                    responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] - rowsum);
+                    responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowsum);
+                    //responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] - rowsum);
                     double w = 1.0;
                     if (weights_global.size() > 0){
                         w = weights_global[i];
@@ -513,9 +694,14 @@ namespace optimML{
             }
         }
         
+        // notes: N = cstot
+        // N_k = compsums[i]
+
         // Update weights of components
         for (int j = 0; j < n_components; ++j){
-            component_weights[j] = compsums[j] / cstot;
+            component_weights[j] = (compsums[j] + 0.01)/(cstot + (double)n_components*(0.01));
+            //component_weights[j] = compsums[j] / cstot;
+            log_component_weights[j] = log(component_weights[j]);
         }
     }
     
@@ -653,6 +839,13 @@ namespace optimML{
         is_fit = true;
         return llprev;
     }
+    
+    void em_solver::reset_params(){
+        // Re-set parameters to their original values
+        for (int i = 0; i < params_orig.size(); ++i){
+            set_param(i, params_orig[i]);
+        }
+    }
 
     /**
      * There may be a case where a model was fit with too many components, and
@@ -759,10 +952,8 @@ namespace optimML{
                 }
                 // Eliminate the chosen component.
                 //rm_component(maxposcomp);
-                // Re-set parameters to their original values
-                for (int i = 0; i < params_orig.size(); ++i){
-                    set_param(i, params_orig[i]);
-                }
+                
+                reset_params(); 
                 fit();
             }
             else{
@@ -785,6 +976,7 @@ namespace optimML{
             fprintf(stderr, "    %d) %f\n", i, results[i]);   
         }
         fprintf(stderr, "  Component weights:\n");
+        double ws = 0.0;
         for (int i = 0; i < n_components; ++i){
             fprintf(stderr, "    ");
             if (component_names[i] != ""){
@@ -793,7 +985,9 @@ namespace optimML{
             else{
                 fprintf(stderr, "%d) ", i);
             }
+            ws += component_weights[i];
             fprintf(stderr, "%f\n", component_weights[i]);
         }
+        fprintf(stderr, "  sum %f\n", ws);
     }    
 }
