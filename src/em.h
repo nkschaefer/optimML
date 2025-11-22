@@ -44,6 +44,8 @@ namespace optimML{
             std::vector<double> params_orig;
             
             bool penent;
+            
+            int nthreads;
 
             int n_params;
             std::deque<multivar_ml_solver* > solvers;
@@ -71,6 +73,14 @@ namespace optimML{
 
             double delta_thresh;
             int maxiter;
+            
+            void E_step_penent();
+            void E_step_penent_aux(const std::vector<double>& a, double& b, std::vector<double>& c);
+            
+            void E_step_penent2();
+            void E_step_penent2_aux(const std::vector<double>& a, double& b, std::vector<double>& c);
+            
+            void dir_weights_aux(const std::vector<double>& a, double& b, std::vector<double>& c);
 
             void E_step();
             double M_step();
@@ -124,6 +134,11 @@ namespace optimML{
             
             void reset_params();
 
+            std::vector<double> dir_weights();
+            std::vector<double> frac_p_components();
+            
+            void elim_dists_by_count(int skipdist=-1);
+
             // Add data key/val to go with most recently-added equation
             bool add_data(std::string name, std::vector<double>& dat);
             bool add_data(std::string name, std::vector<int>& dat);
@@ -160,7 +175,7 @@ namespace optimML{
 
             double fit();
             
-            bool rm_correlated_components();
+            std::vector<int> rm_correlated_components();
 
             double loglik;
             double bic;

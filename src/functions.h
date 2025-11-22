@@ -18,5 +18,6 @@
 
 double logit(double x);
 double expit(double x);
-
+double digamma_approx(double x);
+double poisll(double x, double l);
 #endif
