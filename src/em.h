@@ -43,8 +43,6 @@ namespace optimML{
             std::vector<double> params_extern;
             std::vector<double> params_orig;
             
-            bool penent;
-            
             int nthreads;
 
             int n_params;
@@ -74,14 +72,6 @@ namespace optimML{
             double delta_thresh;
             int maxiter;
             
-            void E_step_penent();
-            void E_step_penent_aux(const std::vector<double>& a, double& b, std::vector<double>& c);
-            
-            void E_step_penent2();
-            void E_step_penent2_aux(const std::vector<double>& a, double& b, std::vector<double>& c);
-            
-            void dir_weights_aux(const std::vector<double>& a, double& b, std::vector<double>& c);
-
             void E_step();
             double M_step();
             
@@ -134,7 +124,6 @@ namespace optimML{
             
             void reset_params();
 
-            std::vector<double> dir_weights();
             std::vector<double> frac_p_components();
             
             void elim_dists_by_count(int skipdist=-1);
@@ -168,9 +157,6 @@ namespace optimML{
             
             void set_delta(double d);
             
-            void penalize_entropy();
-            void penalize_entropy(bool pe);
-
             void init();
 
             double fit();

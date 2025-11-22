@@ -67,7 +67,6 @@ namespace optimML{
         this->no_data_yet = true;
         this->solver_global = NULL;
         this->weightsum = 0.0;
-        this->penent = false;
     }
     
     em_solver::em_solver(){
@@ -84,7 +83,6 @@ namespace optimML{
         this->solver_global = NULL;
         this->weightsum = 0.0;
         this->is_fit = false;
-        this->penent = false;
     }
     
     em_solver::~em_solver(){
@@ -126,14 +124,6 @@ namespace optimML{
         }
     }
     
-    void em_solver::penalize_entropy(){
-        penent = true;
-    }
-
-    void em_solver::penalize_entropy(bool pe){
-        penent = pe;
-    }
-
     void em_solver::init_responsibility_matrix(int n_obs){
         if (this->n_obs != -1){
             // Responsibility matrix was formerly initialized for a different
@@ -460,303 +450,6 @@ namespace optimML{
         return solver_global->add_poisson_prior(idx, lambda);
     }
     
-    void em_solver::E_step_penent_aux(const vector<double>& x, double& f, vector<double>& g){
-        // F: -(log likelihood - entropy)
-        
-        static vector<double> x_t(x.size());
-        static vector<double> dt_dx(x.size());
-        static vector<double> gradient_ll(x.size());
-        static vector<double> gradient_entropy(x.size());
-        vector<double> log_component_weights(x.size());
-
-        // First, un-transform variables
-        double sum = 0.0;
-        for (int i = 0; i < x.size(); ++i){
-            x_t[i] = expit(x[i]);
-            dt_dx[i] = 0.0;
-            gradient_ll[i] = 0.0;
-            gradient_entropy[i] = 0.0;
-            g[i] = 0.0;
-            sum += x_t[i];
-        }
-        
-        //fprintf(stderr, "weights:");
-        for (int i = 0; i < x.size(); ++i){
-            x_t[i] /= sum;
-            //fprintf(stderr, " [%d] %f", i, x_t[i]);
-            log_component_weights[i] = log(x_t[i]);
-            // Handle derivatives of sum-to-one groups
-            double e_negx1 = exp(-x[i]);
-            double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
-            double e_negx1_p1_3 = e_negx1_p1_2 * (e_negx1 + 1);
-            double der_comp1 = e_negx1 / (e_negx1_p1_2 * sum) - 
-                e_negx1 / (e_negx1_p1_3 * sum * sum);
-            dt_dx[i] = der_comp1;
-        }
-        //fprintf(stderr, "\n");
-
-        int signp;
-        
-        double ll = 0.0;
-        double entropy = 0.0;
-        
-        double epsilon = 1e-9;
-
-        // Now calculate log likelihood, entropy, and gradient contributions
-        for (int i = 0; i < n_obs; ++i){
-            double w = weights_global[i];
-            double rowmax = 0.0;
-            for (int j = 0; j < n_components; ++j){
-                double ll = solvers[j]->data_ll[i] + log_component_weights[j];
-                if (rowmax == 0.0 || ll > rowmax){
-                    rowmax = ll;
-                }
-            }
-            double rowsum = 0.0;
-            for (int j = 0; j < n_components; ++j){
-                rowsum += exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowmax);
-            }    
-            if (rowsum == 0.0){
-                rowsum = 1.0;
-            }
-            rowsum = log(rowsum) + rowmax;
-            double rs = exp(rowsum);
-
-            // TO DO: deal with consequences of using epsilon to avoid p = 0 or p = 1?
-            for (int j = 0; j < n_components; ++j){
-                responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowsum);
-                if (responsibility_matrix[i][j] == 0.0){
-                    responsibility_matrix[i][j] += epsilon;
-                }
-                else if (responsibility_matrix[i][j] == 1.0){
-                    responsibility_matrix[i][j] -= epsilon;
-                }
-                
-                // Log likelihood contribution
-                ll += w * (responsibility_matrix[i][j]) * solvers[j]->data_ll[i];
-                
-                // Entropy contribution
-                double lr = log(responsibility_matrix[i][j]);
-                entropy += lr * responsibility_matrix[i][j];
-                
-                // Log likelihood gradient contribution
-                gradient_ll[j] += w * (solvers[j]->data_ll[i]) * dt_dx[j];
-
-                // Entropy gradient contribution
-                //gradient_entropy[j] += w * (lr + 1.0) * dt_dx[j];
-                
-                double dg_dr = log(responsibility_matrix[i][j]) + 1.0;
-                double lp = exp(solvers[j]->data_ll[i] + log_component_weights[j]);
-                double z = rs - lp;
-                double lz = exp(solvers[j]->data_ll[i]) * z;
-                double dr_dp = lz/((lp + z)*(lp + z));
-                gradient_entropy[j] += w * dg_dr * dr_dp;
-            }
-        }
-        
-        //fprintf(stderr, "LL %f ENTROPY %f SCORE %f\n", ll, entropy, ll + entropy);
-
-        // We are minimizing, so use negative log likelihood
-        f = ( -ll ) - entropy;
-        //f = -ll;
-        for (int j = 0; j < n_components; ++j){
-            //fprintf(stderr, "dll/dj %d) %f de/dj %d) %f\n", j, gradient_ll[j], j, gradient_entropy[j]);
-            g[j] += (-gradient_ll[j] - gradient_entropy[j]);
-            //g[j] = -gradient_ll[j];
-        }
-    }
-
-    void em_solver::E_step_penent(){
-        if (n_obs == -1 || responsibility_matrix == NULL){
-            // Learn how many data points
-            int nd = solver_global->get_n_data();
-            init_responsibility_matrix(nd);
-        }
-        
-        for (int j = 0; j < n_components; ++j){
-            if (component_weights[j] > 0){
-                // Compute log likelihood of each observation under this model
-                solvers[j]->eval_ll_all();
-            }
-        }
-        
-        std::function<void(const STLBFGS::vector&, double&, STLBFGS::vector&)> f = 
-            [=](const STLBFGS::vector& a, double& b, STLBFGS::vector& c) {
-            this->E_step_penent_aux(a, b, c);
-        };
-        
-        STLBFGS::Optimizer opt{f, 1};
-        opt.verbose = false;
-        opt.ftol = delta_thresh;
-        opt.maxiter = maxiter;
-        std::vector<double> xcopy = component_weights;
-        for (int i = 0; i < xcopy.size(); ++i){
-            xcopy[i] = logit(xcopy[i]);
-        }
-        double res = opt.run(xcopy);
-        double sum = 0.0;
-        for (int i = 0; i < n_components; ++i){
-            component_weights[i] = expit(xcopy[i]);
-            sum += component_weights[i];
-        }
-        for (int i = 0; i < n_components; ++i){
-            component_weights[i] /= sum;
-        }
-    }
-    
-    void em_solver::E_step_penent2_aux(const vector<double>& x, double& f, vector<double>& g){
-        // Multinomial likelihood with entropy penalty
-        
-        static vector<double> x_t(x.size());
-        static vector<double> dt_dx(x.size());
-        static vector<double> gradient_ll(x.size());
-        static vector<double> gradient_entropy(x.size());
-        
-        double entropy = 0.0;
-
-        // First, un-transform variables
-        double sum = 0.0;
-        double cstot = 0.0;
-        for (int i = 0; i < x.size(); ++i){
-            x_t[i] = expit(x[i]);
-            dt_dx[i] = 0.0;
-            gradient_ll[i] = 0.0;
-            gradient_entropy[i] = 0.0;
-            g[i] = 0.0;
-            sum += x_t[i];
-            cstot += compsums[i];
-        }
-        for (int i = 0; i < x.size(); ++i){
-            x_t[i] /= sum;
-            entropy += x_t[i] * log(x_t[i]);
-            // Handle derivatives of sum-to-one groups
-            double e_negx1 = exp(-x[i]);
-            double e_negx1_p1_2 = pow(e_negx1 + 1, 2);
-            double e_negx1_p1_3 = e_negx1_p1_2 * (e_negx1 + 1);
-            double der_comp1 = e_negx1 / (e_negx1_p1_2 * sum) - 
-                e_negx1 / (e_negx1_p1_3 * sum * sum);
-            dt_dx[i] = der_comp1;
-            gradient_entropy[i] = (log(x_t[i]) + 1.0)*dt_dx[i];
-        }
-
-        int intptr;
-
-        double xsum = 1;
-        double term2 = 0;
-        double term3 = 0;
-        double psum = 0.0;
-        
-        for (int i = 0; i < compsums.size(); ++i){
-            psum += x_t[i];
-            xsum += compsums[i];
-            int intptr;
-            term2 += lgammaf_r(compsums[i] + 1, &intptr);
-            term3 += compsums[i] * log(x_t[i]);
-            
-            // dLL/dx_t = x_t[i]/x_ttot
-            double dll_dxt = (x_t[i] / cstot) * dt_dx[i];
-            g[i] = (-dll_dxt + gradient_entropy[i]);
-        }
-        double term1 = lgammaf_r(xsum, &intptr);
-        double ll = term1 - term2 + term3;
-        
-        fprintf(stderr, "LL %f ENT %f SCORE %f\n", ll, entropy, -ll +entropy); 
-        f = -ll + entropy;
-    }
-
-    void em_solver::E_step_penent2(){
-        if (n_obs == -1 || responsibility_matrix == NULL){
-            // Learn how many data points
-            int nd = solver_global->get_n_data();
-            init_responsibility_matrix(nd);
-        }
-        
-        double cstot = 0.0;
-        
-        vector<double> log_component_weights;
-        
-        for (int j = 0; j < n_components; ++j){
-            if (component_weights[j] > 0){
-                // Compute log likelihood of each observation under this model
-                solvers[j]->eval_ll_all();
-                log_component_weights.push_back(log(component_weights[j]));
-            }
-            else{
-                log_component_weights.push_back(0.0);
-            }
-            compsums[j] = 0.0;
-        }
-        
-        // Fill in responsibility matrix & weight matrix
-        for (int i = 0; i < n_obs; ++i){
-            if (weights_global.size() > 0 && weights_global[i] == 0.0){
-                continue;
-            }
-            double rowmax = 0;
-            for (int j = 0; j < n_components; ++j){
-                if (component_weights[j] > 0.0){
-                    double ll = solvers[j]->data_ll[i] + log_component_weights[j];
-                    //double ll = solvers[j]->data_ll[i];
-                    if (ll > rowmax){
-                        rowmax = ll;
-                    }
-                }
-            }
-            double rowsum = 0.0;
-            for (int j = 0; j < n_components; ++j){
-                if (component_weights[j] > 0.0){
-                    rowsum += exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowmax);
-                    //rowsum += exp(solvers[j]->data_ll[i] - rowmax);
-                }
-            }
-            if (rowsum == 0.0){
-                rowsum = 1.0;
-            }
-            rowsum = log(rowsum) + rowmax;
-            for (int j = 0; j < n_components; ++j){
-                if (component_weights[j] == 0.0){
-                    responsibility_matrix[i][j] = 0.0;
-                }
-                else{
-                    responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowsum);
-                    //responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] - rowsum);
-                    double w = 1.0;
-                    if (weights_global.size() > 0){
-                        w = weights_global[i];
-                    }
-                    compsums[j] += w * responsibility_matrix[i][j];
-                    cstot += w * responsibility_matrix[i][j];
-                }
-            }
-        }
-        
-        // Update weights of components
-        
-        std::function<void(const STLBFGS::vector&, double&, STLBFGS::vector&)> f = 
-            [=](const STLBFGS::vector& a, double& b, STLBFGS::vector& c) {
-            this->E_step_penent2_aux(a, b, c);
-        };
-        
-        STLBFGS::Optimizer opt{f, 1};
-        opt.verbose = false;
-        opt.ftol = delta_thresh;
-        opt.maxiter = maxiter;
-        std::vector<double> xcopy = component_weights;
-        for (int i = 0; i < xcopy.size(); ++i){
-            xcopy[i] = logit(xcopy[i]);
-        }
-        double res = opt.run(xcopy);
-        double sum = 0.0;
-        for (int i = 0; i < n_components; ++i){
-            component_weights[i] = expit(xcopy[i]);
-            sum += component_weights[i];
-        }
-        for (int i = 0; i < n_components; ++i){
-            component_weights[i] /= sum;
-        }
-        
-    }
-    
     void em_solver::E_step(){
         if (n_obs == -1 || responsibility_matrix == NULL){
             // Learn how many data points
@@ -852,75 +545,7 @@ namespace optimML{
         return solver_global->log_likelihood;
     }
      
-    void em_solver::dir_weights_aux(const vector<double>& x, double& f, vector<double>& g){
-        double ll = 0.0; 
-        int signp;
-        
-        // dx_dt will be the same as x_t (both are e^x)
-        vector<double> x_t(x.size());
-
-        for (int i = 0; i < x.size(); ++i){
-            x_t[i] = exp(x[i]);
-        }
-
-        for (int i = 0; i < n_obs; ++i){
-            double term1 = 0.0;
-            double term2 = 0.0;
-            double term3 = 0.0;
-            
-            double w = 1.0;
-            if (weights_global.size() > 0){
-                w = weights_global[i];
-            }
-            
-            double dterm1 = 0.0;        
-    
-            for (int j = 0; j < n_components; ++j){
-                double f = responsibility_matrix[i][j];
-                term1 += x_t[j];
-                term2 += lgammaf_r(x_t[j], &signp);
-                term3 += (x_t[j] - 1.0)*log(f);
-                dterm1 += x_t[j];
-                // Invert gradient
-                g[j] +=  w * (digamma_approx(x_t[j]) - log(f)) * x_t[j];
-            }
-            for (int j = 0; j < n_components; ++j){
-                // Invert gradient
-                g[j] -= w * digamma_approx(dterm1);
-            } 
-
-            ll += w * (lgammaf_r(term1, &signp) - term2 + term3);
-        }
-        
-        f = -ll;
-    }
-    
-    std::vector<double> em_solver::dir_weights(){
-        if (!is_fit){
-            fprintf(stderr, "ERROR: must fit model before finding Dirichlet weight concentrations\n");
-            exit(1);
-        }
-        
-        std::function<void(const STLBFGS::vector&, double&, STLBFGS::vector&)> f = 
-            [=](const STLBFGS::vector& a, double& b, STLBFGS::vector& c) {
-            this->dir_weights_aux(a, b, c);
-        };
-        
-        STLBFGS::Optimizer opt{f, 1};
-        opt.verbose = false;
-        opt.ftol = delta_thresh;
-        opt.maxiter = maxiter;
-        std::vector<double> xcopy = component_weights;
-        for (int i = 0; i < xcopy.size(); ++i){
-            xcopy[i] = log(xcopy[i]);
-        }
-        double res = opt.run(xcopy);
-        for (int i = 0; i < xcopy.size(); ++i){
-            xcopy[i] = exp(xcopy[i]);
-        }
-        return xcopy;
-    }
-    
+       
     std::vector<double> em_solver::frac_p_components(){
         if (!is_fit){
             fprintf(stderr, "ERROR: must fit first\n");
@@ -959,7 +584,20 @@ namespace optimML{
         return numerator;
 
     }
-
+    
+    /**
+     * After fitting, assuming there are too many components in the model and we want
+     * to eliminate some of them, count the number of observations "belonging" to each
+     * component.
+     *
+     * Then assume there are two true types of counts: those from "true" components
+     * and those from "noise" or erroneous components. Assume the count of each
+     * follows a Poisson distribution and find the likeliest number of true
+     * components, then eliminate erroneous components.
+     *
+     * This is the same algorithm used by demux_mt in cellbouncer to determine the
+     * number of "true" vs erroneous mitochondrial haplotypes.
+     */
     void em_solver::elim_dists_by_count(int skipdist){
         if (!is_fit){
             fprintf(stderr, "ERROR: dists must be fit before filtering by count\n");
@@ -1019,7 +657,6 @@ namespace optimML{
             for (int i = ntrue; i < countsort.size(); ++i){
                 ll += poisll(-countsort[i].first, meanerr);
             }
-            fprintf(stderr, "NTRUE %d LL %f\n", ntrue, ll);
             if (llprev != 0.0 && ll < llprev){
                 ntrue_chosen = ntrue-1;
                 break;
@@ -1031,7 +668,7 @@ namespace optimML{
             ntrue_chosen = countsort.size();
         }
 
-        fprintf(stderr, "CHOSE %d\n", ntrue_chosen);
+        fprintf(stderr, "chose %d components\n", ntrue_chosen);
         if (ntrue_chosen < countsort.size()){
             vector<int> idxsort;
             for (int i = ntrue_chosen; i < countsort.size(); ++i){
@@ -1128,14 +765,6 @@ namespace optimML{
         double delta = 999;
         int it = 0;
         while (delta > delta_thresh && it < maxiter){
-            /*
-            if (penent){
-                E_step_penent2();
-            }
-            else{
-                E_step();
-            }
-            */
             E_step();
             double ll = M_step();
             if (llprev != 0.0){
