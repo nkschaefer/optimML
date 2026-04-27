@@ -121,6 +121,8 @@ namespace optimML{
         this->x_skip = m.x_skip;
         this->trans_log = m.trans_log;
         this->trans_logit = m.trans_logit;
+        this->trans_bounds = m.trans_bounds;
+        this->bounds = m.bounds;
         this->nmixcomp = m.nmixcomp;
         this->mixcompfracs = m.mixcompfracs;
         this->mixcompfracs_sparse = m.mixcompfracs_sparse;
@@ -212,7 +214,8 @@ namespace optimML{
         d2ll_dx2_prior.push_back(dummy_prior_func);
 
         trans_log.push_back(false);
-        trans_logit.push_back(false);  
+        trans_logit.push_back(false);
+        trans_bounds.push_back(false);
         
         map<string, double> m1;
         params_prior_double.push_back(m1);
@@ -247,12 +250,29 @@ namespace optimML{
             if (this->trans_log[i]){
                 this->trans_log[i] = false;
                 this->trans_logit[i] = false;
+                this->trans_bounds[i] = false;
+                if (bounds.count(i) > 0){
+                    bounds.erase(i);
+                }
                 constrain_pos(i);    
             }
             else if (this->trans_logit[i]){
                 this->trans_log[i] = false;
                 this->trans_logit[i] = false;
+                this->trans_bounds[i] = false;
+                if (bounds.count(i) > 0){
+                    bounds.erase(i);
+                }
                 constrain_01(i);
+            }
+            else if (this->trans_bounds[i]){
+                this->trans_log[i] = false;
+                this->trans_logit[i] = false;
+                this->trans_bounds[i] = false;
+                if (bounds.count(i) > 0){
+                    bounds.erase(i);
+                }
+                constrain_bounds(i, bounds[i].first, bounds[i].second); 
             }
         }
         return true;
@@ -896,6 +916,40 @@ part of a param grp.\n");
         }
         return true;
     }
+    
+    bool multivar::add_cauchy_prior(int idx, double x0, double gamma){
+        if (gamma <= 0){
+            fprintf(stderr, "ERROR: gamma must be >= 0\n");
+            return false;
+        }
+        if (!add_prior(idx, ll_prior_cauchy, dll_prior_cauchy, d2ll_prior_cauchy)){
+            return false;
+        }
+        if (!add_prior_param(idx, "x0", x0)){
+            return false;
+        }
+        if (!add_prior_param(idx, "gamma", gamma)){
+            return false;
+        }
+        return true;
+    }
+    
+    bool multivar::add_lognormal_prior(int idx, double m, double s){
+        if (s <= 0){
+            fprintf(stderr, "ERROR: sigma must be > 0\n");
+            return false;
+        }
+        if (!add_prior(idx, ll_prior_lognormal, dll_prior_lognormal, d2ll_prior_lognormal)){
+            return false;
+        }
+        if (!add_prior_param(idx, "lmu", m)){
+            return false;
+        }
+        if (!add_prior_param(idx, "lsigma", s)){
+            return false;
+        }
+        return true;
+    }
 
     bool multivar::set_param(int idx, double val){
         if (!initialized){
@@ -914,11 +968,20 @@ part of a param grp.\n");
             fprintf(stderr, "ERROR: illegal parameter value for logit-transformed variable\n");
             return false;
         }
+        else if (this->trans_bounds[idx] && (val <= bounds[idx].first || val >= bounds[idx].second)){
+            fprintf(stderr, "ERROR: illegal parameter value for constrained variable\n");
+            return false;
+        }
         if (this->trans_log[idx]){
             x[idx] = log(val);
         }
         else if (this->trans_logit[idx]){
             x[idx] = logit(val);
+        }
+        else if (this->trans_bounds[idx]){
+            pair<double, double>* b = &bounds[idx];
+            x[idx] = log(val - b->first) - log(b->second - val);
+            //x[idx] = b->first + (b->second - b->first)*(1.0/(1.0 + exp(-x[idx])));
         }
         else{
             x[idx] = val;
@@ -939,15 +1002,25 @@ part of a param grp.\n");
         if (this->trans_log[idx]){
             return;
         }
-        else if (this->trans_logit[idx]){
+        else if (this->trans_logit[idx] || this->trans_bounds[idx]){
             x[idx] = expit(x[idx]);
         }
         else if (this->param2grp.count(idx) > 0){
             x[idx] = expit(x[idx]);
             param2grp.erase(idx);
         }
+        if (this->trans_bounds[idx]){
+            pair<double, double>* b = &bounds[idx];
+            x[idx] *= (b->second-b->first);
+            x[idx] += b->first;
+            //x[idx] = log(x[idx] - b->first) - log(b->second - x[idx]);
+        }
         this->trans_logit[idx] = false;
         this->trans_log[idx] = true;
+        this->trans_bounds[idx] = false;
+        if (bounds.count(idx) > 0){
+            bounds.erase(idx);
+        }
         if (x[idx] <= 0){
             fprintf(stderr, "ERROR: initial value %d out of domain for log transformation\n", idx);
             fprintf(stderr, "value: %f\n", x[idx]);
@@ -972,12 +1045,21 @@ part of a param grp.\n");
         else if (this->trans_log[idx]){
             x[idx] = exp(x[idx]);
         }
+        else if (this->trans_bounds[idx]){
+            pair<double, double>* b = &bounds[idx];
+            x[idx] = expit(x[idx]) * (b->second - b->first) + b->first;
+            //x[idx] = log(x[idx] - b->first) - log(b->second - x[idx]);
+        }
         else if (this->param2grp.count(idx) > 0){
             x[idx] = expit(x[idx]);
             param2grp.erase(idx);
         }
         this->trans_log[idx] = false;
         this->trans_logit[idx] = true;
+        this->trans_bounds[idx] = false;
+        if (bounds.count(idx) > 0){
+            bounds.erase(idx);
+        }
         if (x[idx] <= 0 || x[idx] >= 1.0){
             fprintf(stderr, "ERROR: initial value %d out of domain for logit transformation\n", idx);
             fprintf(stderr, "value: %f\n", x[idx]);
@@ -985,6 +1067,50 @@ part of a param grp.\n");
         }
         x[idx] = logit(x[idx]);
     }
+    
+    /*
+    void multivar::constrain_bounds(int idx, double low, double high){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (idx >= n_param-nmixcomp){
+            fprintf(stderr, "ERROR: param idx out of bounds\n");
+            exit(1);
+        }
+        if (low >= high){
+            fprintf(stderr, "ERROR: low bound must be less than high bound\n");
+            exit(1);
+        }
+        // Un-transform if necessary
+        if (this->trans_bounds[idx]){
+            return;
+        }
+        else if (this->trans_log[idx]){
+            x[idx] = exp(x[idx]);
+        }
+        else if (this->trans_logit[idx]){
+            x[idx] = expit(x[idx]);
+        }
+        else if (this->param2grp.count(idx) > 0){
+            x[idx] = expit(x[idx]);
+            param2grp.erase(idx);
+        }
+        this->trans_log[idx] = false;
+        this->trans_logit[idx] = false;
+        if (x[idx] <= low || x[idx] >= high){
+            fprintf(stderr, "ERROR: initial value %d out of range of constraints %f and %f\n", idx,
+                low, high);
+            fprintf(stderr, "value: %f\n", x[idx]);
+            return;
+        }
+        if (bounds.count(idx) > 0){
+            bounds.erase(idx);
+        }
+        bounds.insert(make_pair(idx, make_pair(low, high)));
+        x[idx] = low + (high - low)/(1.0 + exp(-x[idx]));
+    }
+    */
 
     /**
      * When something goes wrong in function evaluation, send a message to stderr.
@@ -1126,7 +1252,7 @@ part of a param grp.\n");
             if (this->trans_log[i]){
                 x_t[i] = exp(x[i]);
             }
-            else if (this->trans_logit[i]){
+            else if (this->trans_logit[i] || this->trans_bounds[i]){
                 x_t[i] = expit(x[i]);
             }
             else if (param2grp.count(i) > 0){
@@ -1135,6 +1261,12 @@ part of a param grp.\n");
             }
             else{
                 x_t[i] = x[i];
+            }
+            if (this->trans_bounds[i]){
+                pair<double, double>* b = &bounds[i];
+                //x_t[i] = log(x[i] - b->first) - log(b->second - x[i]);
+                x_t[i] *= (b->second - b->first);
+                x_t[i] += b->first;
             }
             x_t_extern[i] = x_t[i];
         }
@@ -1671,7 +1803,7 @@ part of a param grp.\n");
             if (trans_log[j]){
                 results[j] = exp(x[j]);
             }
-            else if (trans_logit[j]){
+            else if (trans_logit[j] || trans_bounds[j]){
                 results[j] = expit(x[j]);
             }
             else if (param2grp.count(j) > 0){
@@ -1681,6 +1813,12 @@ part of a param grp.\n");
             else{
                 results[j] = x[j];
             } 
+            if (trans_bounds[j]){
+                pair<double, double>* b = &bounds[j];
+                results[j] *= (b->second - b->first);
+                results[j] += b->first;
+                //results[j] = log(x[j] - b->first) - log(b->second - x[j]);
+            }
         }
 
         for (map<int, int>::iterator pg = param2grp.begin(); pg != param2grp.end(); ++pg){
@@ -1706,7 +1844,62 @@ part of a param grp.\n");
     bool multivar::solve(){
         return false;
     }
-    
+   
+    /**
+     * Evaluate the prior log likelihood at the result MLE/MAP value
+     * for the given parameter.
+     */ 
+    double multivar::eval_prior(int idx){
+        if (!this->initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            return 0.0;
+        }
+        if (idx < 0 || idx >= this->n_param){
+            fprintf(stderr, "ERROR: invalid index\n");
+            return 0.0;
+        }
+        if (!this->has_prior[idx]){
+            fprintf(stderr, "ERROR: no prior on parameter %d\n", idx);
+            return 0.0;
+        }
+        return ll_x_prior[idx](results[idx], this->params_prior_double[idx], 
+            this->params_prior_int[idx]);
+    }
+
+    double multivar::eval_prior_deriv(int idx){
+        if (!this->initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            return 0.0;
+        }
+        if (idx < 0 || idx >= this->n_param){
+            fprintf(stderr, "ERROR: invalid index\n");
+            return 0.0;
+        }
+        if (!this->has_prior[idx]){
+            fprintf(stderr, "ERROR: no prior on parameter %d\n", idx);
+            return 0.0;
+        }
+        return dll_dx_prior[idx](results[idx], this->params_prior_double[idx], 
+            this->params_prior_int[idx]);
+    }
+
+    double multivar::eval_prior_deriv2(int idx){
+        if (!this->initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            return 0.0;
+        }
+        if (idx < 0 || idx >= this->n_param){
+            fprintf(stderr, "ERROR: invalid index\n");
+            return 0.0;
+        }
+        if (!this->has_prior[idx]){
+            fprintf(stderr, "ERROR: no prior on parameter %d\n", idx);
+            return 0.0;
+        }
+        return d2ll_dx2_prior[idx](results[idx], this->params_prior_double[idx], 
+            this->params_prior_int[idx]);
+    }
+
     /**
      * For debugging: prints log likelihood over the specified range
      * of a single variable.

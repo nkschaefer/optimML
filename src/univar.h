@@ -75,6 +75,11 @@ namespace optimML{
             // Should the independent variable be constrained to (0,1)?
             bool trans_logit;
             
+            // Should the independent variable be constrained to arbitrary bounds?
+            bool trans_bounds;
+            double bound_low;
+            double bound_high;
+
             // Print warning messages for bad function evaluations
             void dump_cur_params();
             void dump_prior_params();
@@ -88,6 +93,8 @@ namespace optimML{
             void init(univar_func ll_x, univar_func dll_dx);
             void init(univar_func ll_x, univar_func dll_dx, univar_func d2ll_dx2);
             
+            double safe_x(double x);
+
             double x_t;
             double df_dt_x;
             double d2f_dt2_x;
@@ -125,7 +132,8 @@ namespace optimML{
             
             void constrain_pos();
             void constrain_01();
-            
+            //void constrain_bounds(double low, double high);
+
             void set_epsilon(double);
 
             // For debugging

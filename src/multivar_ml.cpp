@@ -117,7 +117,7 @@ namespace optimML{
                 x_t[i] = exp(x[i]);
                 dt_dx[i] = x_t[i];
             }
-            else if (this->trans_logit[i]){
+            else if (this->trans_logit[i] || this->trans_bounds[i]){
                 /*
                 if (x[i] < xval_logit_min || x[i] > xval_logit_max){
                     x_skip[i] = true;
@@ -129,6 +129,7 @@ namespace optimML{
                 x_t[i] = expit(x[i]);
                 dt_dx[i] = exp(-x[i]) / pow((exp(-x[i]) + 1), 2);
             }
+            
             else if (param2grp.count(i) > 0){
                 /*
                 if (x[i] < xval_logit_min || x[i] > xval_logit_max){
@@ -153,7 +154,10 @@ namespace optimML{
                 x_t[i] = x[i];
                 dt_dx[i] = 1.0;
             }
-            
+            if (this->trans_bounds[i]){
+                pair<double, double>* b = &bounds[i];
+                dt_dx[i] *= (b->second - b->first);
+            }
             if (nthread > 0 && nmixcomp > 0){
                for (int t = 0; t < nthread; ++t){
                    x_t_extern_thread[t][i] = x_t[i];
@@ -280,6 +284,7 @@ namespace optimML{
                 dy_dt_prior.push_back(1.0);
             }
         }
+
         if (this->nthread > 0 && !threads_init){
             // Set up everything
             create_threads();
@@ -290,7 +295,7 @@ namespace optimML{
             this->eval_funcs_bfgs(a, b, c);
         };
         
-        STLBFGS::Optimizer opt{f, nthread_bfgs};
+        STLBFGS::Optimizer opt{f, nthread_bfgs, 10};
         opt.verbose = false;
         opt.ftol = delta_thresh;
         opt.maxiter = maxiter;
@@ -301,6 +306,20 @@ namespace optimML{
         }
         double ll = eval_ll_all();
         fill_results(ll);
+        
+        // Fill SE values
+        
+        vector<double> basisv(n_param-nmixcomp, 0);
+        vector<double> resultv(n_param-nmixcomp,0);
+        
+        opt.invH.mult(basisv, resultv);
+        for (int i = 0; i < n_param-nmixcomp; ++i){
+            basisv[i] = 1;
+            opt.invH.mult(basisv, resultv);
+            double diag = resultv[i];
+            basisv[i] = 0;
+            se[i] = sqrt(diag);
+        }
         return true; 
     }
     

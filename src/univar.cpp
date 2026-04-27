@@ -33,7 +33,10 @@ namespace optimML{
         has_prior = false;
         trans_log = false;
         trans_logit = false;
-       
+        trans_bounds = false;
+        bound_low = 0;
+        bound_high = 0;
+
         xval_precision = 1e-8;
         initialized = false;
 
@@ -106,18 +109,31 @@ namespace optimML{
         throw optimML::OPTIMML_MATH_ERR;
     }
     
+    double univar::safe_x(double x){
+        if (trans_log && exp(x) < xval_precision){
+            x = log(xval_precision);
+        }
+        else if ((trans_logit || trans_bounds) && expit(x) < xval_precision){
+            x = logit(xval_precision);
+        }
+        else if ((trans_logit || trans_bounds) && expit(x) > 1.0-xval_precision){
+            x = logit(1.0-xval_precision);
+        }
+        return x;
+    }
+
     double univar::eval_ll_x(double x){
-        eval_funcs(x, true, false, false);
+        eval_funcs(safe_x(x), true, false, false);
         return cur_ll_x;
     }
 
     double univar::eval_dll_dx(double x){
-        eval_funcs(x, false, true, false);
+        eval_funcs(safe_x(x), false, true, false);
         return cur_dll_dx;
     }
 
     double univar::eval_d2ll_dx2(double x){
-        eval_funcs(x, false, false, true);
+        eval_funcs(safe_x(x), false, false, true);
         return cur_d2ll_dx2;
     }
 
@@ -133,6 +149,13 @@ namespace optimML{
             fprintf(stderr, "ERROR: cannot compute second derivative; not given\n");
             exit(1);
         }
+        else if (eval_d2ll_dx2 && ((trans_log || trans_logit || trans_bounds) && !has_dll_dx)){
+            fprintf(stderr, "ERROR: cannot compute second derivative with transformation & without first derivative\n");
+            exit(1);
+        }
+        if (eval_d2ll_dx2 && (trans_log || trans_logit || trans_bounds)){
+            eval_dll_dx = true;
+        }
 
         x_t = x;
         df_dt_x = 1.0; 
@@ -145,7 +168,7 @@ namespace optimML{
             // f(x) = e^x -> d2f_dx2 = e^x
             d2f_dt2_x = x_t;
         }
-        else if (this->trans_logit){
+        else if (this->trans_logit || this->trans_bounds){
             x_t = expit(x);
             // f(x) = 1/(1 + e^(-x)) -> df_dx = exp(-x) / ((exp(-x)) + 1)^2
             df_dt_x = exp(-x) / pow(((exp(-x)) + 1), 2);
@@ -153,7 +176,13 @@ namespace optimML{
             double e_x = exp(x);
             d2f_dt2_x = (e_x*(e_x - 1.0))/pow(e_x + 1.0, 3);
         }
-        
+        if (this->trans_bounds){
+            x_t *= (bound_high-bound_low);
+            x_t += bound_low;
+            df_dt_x *= (bound_high-bound_low);
+            d2f_dt2_x *= (bound_low-bound_high);
+        }
+
         cur_ll_x = 0;
         cur_dll_dx = 0;
         cur_d2ll_dx2 = 0;
@@ -178,12 +207,15 @@ namespace optimML{
                     w = weights[i];
                 }
                 
+                double yprime = 0;
+
                 if (eval_ll_x){
                     double y = ll_x(x_t, this->param_double_cur, this->param_int_cur);
                     if (isnan(y) || isinf(y)){
-                        fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
-                        fprintf(stderr, "parameter: %f\n", x_t);
-                        dump_cur_params(); 
+                        //fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
+                        //fprintf(stderr, "parameter: %f\n", x_t);
+                        //dump_cur_params();
+                        throw optimML::OPTIMML_MATH_ERR;
                     }
                     if (ll_data_points){
                         data_ll[i] = y;
@@ -191,22 +223,29 @@ namespace optimML{
                     cur_ll_x += y * w;
                 }
                 if (eval_dll_dx && this->has_dll_dx){
-                    double yprime = dll_dx(x_t, this->param_double_cur, this->param_int_cur);
+                    yprime = dll_dx(x_t, this->param_double_cur, this->param_int_cur);
                     if (isnan(yprime) || isinf(yprime)){
-                        fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
-                        fprintf(stderr, "parameter: %f\n", x_t);
-                        dump_cur_params(); 
+                        //fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
+                        //fprintf(stderr, "parameter: %f\n", x_t);
+                        //dump_cur_params(); 
+                        throw optimML::OPTIMML_MATH_ERR;
                     }
                     cur_dll_dx += yprime * w * df_dt_x;
                 }
                 if (eval_d2ll_dx2 && this->has_d2ll_dx2){
                     double yprime2 = d2ll_dx2(x_t, this->param_double_cur, this->param_int_cur);
                     if (isnan(yprime2) || isinf(yprime2)){
-                        fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
-                        fprintf(stderr, "parameter: %f\n", x_t);
-                        dump_cur_params();  
+                        //fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
+                        //fprintf(stderr, "parameter: %f\n", x_t);
+                        //dump_cur_params();  
+                        throw optimML::OPTIMML_MATH_ERR;    
                     }
-                    cur_d2ll_dx2 += yprime2 * w * d2f_dt2_x;
+                    if (trans_log || trans_logit || trans_bounds){
+                        cur_d2ll_dx2 += w * (yprime2 * df_dt_x * df_dt_x + yprime * d2f_dt2_x);
+                    }
+                    else{ 
+                        cur_d2ll_dx2 += yprime2 * w * d2f_dt2_x;
+                    }
                 }
             }
         }
@@ -220,21 +259,26 @@ namespace optimML{
 
         // Handle priors
         if (this->has_prior){
+
+            double yprime_prior = 0;
+
             if (eval_ll_x){
                 double yprior = ll_x_prior(x_t, this->params_prior_double, this->params_prior_int);
                 if (isinf(yprior) || isnan(yprior)){
-                    fprintf(stderr, "ERROR: illegal value from prior function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_prior_params();
+                    //fprintf(stderr, "ERROR: illegal value from prior function\n");
+                    //fprintf(stderr, "parameter: %f\n", x_t);
+                    //dump_prior_params();
+                    throw optimML::OPTIMML_MATH_ERR;
                 }
                 cur_ll_x += yprior;
             }
             if (eval_dll_dx && this->has_dll_dx){
-                double yprime_prior = dll_dx_prior(x_t, this->params_prior_double, this->params_prior_int);
+                yprime_prior = dll_dx_prior(x_t, this->params_prior_double, this->params_prior_int);
                 if (isinf(yprime_prior) || isnan(yprime_prior)){
-                    fprintf(stderr, "ERROR: illegal value from first derivative prior function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_prior_params();
+                    //fprintf(stderr, "ERROR: illegal value from first derivative prior function\n");
+                    //fprintf(stderr, "parameter: %f\n", x_t);
+                    //dump_prior_params();
+                    throw optimML::OPTIMML_MATH_ERR;
                 }
                 cur_dll_dx += yprime_prior * df_dt_x;
             }
@@ -242,11 +286,17 @@ namespace optimML{
                 
                 double yprime2_prior = d2ll_dx2_prior(x_t, this->params_prior_double, this->params_prior_int);
                 if (isinf(yprime2_prior) || isnan(yprime2_prior)){
-                    fprintf(stderr, "ERROR: illegal value from second derivative prior function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_prior_params();  
+                    //fprintf(stderr, "ERROR: illegal value from second derivative prior function\n");
+                    //fprintf(stderr, "parameter: %f\n", x_t);
+                    //dump_prior_params();  
+                    throw optimML::OPTIMML_MATH_ERR;
                 } 
-                cur_d2ll_dx2 += yprime2_prior * d2f_dt2_x; 
+                if (trans_log || trans_logit || trans_bounds){
+                    cur_d2ll_dx2 += yprime2_prior * df_dt_x * df_dt_x + yprime_prior * d2f_dt2_x;
+                }
+                else{
+                    cur_d2ll_dx2 += yprime2_prior * d2f_dt2_x; 
+                }
             }
         }
     }
@@ -326,13 +376,30 @@ for prior. Second derivatives will not be calculated.\n");
     void univar::constrain_pos(){
         this->trans_log = true;
         this->trans_logit = false;
+        this->trans_bounds = false;
     }
 
     // Constrain independent variable to be in (0,1)
     void univar::constrain_01(){
         this->trans_log = false;
         this->trans_logit = true;
+        this->trans_bounds = false;
     }
+    
+    /*
+    // Constrain independent variable to be within arbitrary bounds (exclusive)
+    void univar::constrain_bounds(double l, double h){
+        if (h <= l){
+            fprintf(stderr, "ERROR: invalid bounds: %f %f\n", l, h);
+            exit(1);
+        }
+        this->trans_log = false;
+        this->trans_logit = false;
+        this->trans_bounds = true;
+        bound_low = l;
+        bound_high = h;
+    }
+    */
     
     // Change the tolerance for stopping iteration.
     void univar::set_epsilon(double e){
@@ -424,6 +491,13 @@ for prior. Second derivatives will not be calculated.\n");
      * over the specified range.
      */
     void univar::print(double lower, double upper, double step){
+        if (this->n_data == 0){
+            // Check to see if the user added fixed data that can be transformed into regular data.
+            if (!this->fixed_data_to_data()){
+                fprintf(stderr, "ERROR: no data added\n");
+                return;
+            }
+        }
         if (trans_log && (lower <= 0)){
             lower = xval_precision;
         }
@@ -433,6 +507,13 @@ for prior. Second derivatives will not be calculated.\n");
         if (trans_logit && upper >= 1){
             upper = 1.0-xval_precision;
         }
+        if (trans_bounds && lower < bound_low){
+            lower = bound_low+xval_precision;
+        }
+        if (trans_bounds && upper > bound_high){
+            upper = bound_high-xval_precision;
+        }
+
         for (double x = lower; x <= upper; x += step){
             double x_t = x;
             if (this->trans_log){
@@ -440,6 +521,9 @@ for prior. Second derivatives will not be calculated.\n");
             }
             else if (this->trans_logit){
                 x_t = logit(x);
+            }
+            else if (this->trans_bounds){
+                x_t = log(x - bound_low) - log(bound_high - x);
             }
             eval_funcs(x_t, true, has_dll_dx, has_d2ll_dx2);
             if (has_dll_dx && has_d2ll_dx2){

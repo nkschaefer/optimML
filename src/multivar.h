@@ -158,7 +158,6 @@ namespace optimML{
             // Does this solver have the need/ability to calculate the second derivative?    
             bool has_2d;
 
-            std::vector<bool> has_prior;
             // Allow users to provide a Dirichlet prior over mixture components (optional)
             bool has_prior_mixcomp;
             std::vector<double> dirichlet_prior_mixcomp;
@@ -198,6 +197,10 @@ namespace optimML{
             // Should the independent variables be constrained to (0,1)?
             std::vector<bool> trans_logit;
             
+            // Are there arbitrary bounds on any variable?
+            std::vector<bool> trans_bounds;
+            std::map<int, std::pair<double, double> > bounds;
+
             // How many mixture component variables are there
             int nmixcomp;
 
@@ -270,6 +273,9 @@ namespace optimML{
 
         public:
             
+            // Vector of true/false indicating whether each parameter has a prior.
+            std::vector<bool> has_prior;
+
             void init(std::vector<double> params_init, multivar_func ll, 
                 multivar_func_d dll, multivar_func_d2 d2ll);
             
@@ -288,6 +294,8 @@ namespace optimML{
             bool add_normal_prior(int idx, double mu, double sigma, double a, double b);
             bool add_beta_prior(int idx, double alpha, double beta);
             bool add_poisson_prior(int idx, double lambda);
+            bool add_cauchy_prior(int idx, double x0, double gamma);
+            bool add_lognormal_prior(int idx, double m, double s);
 
             bool add_prior_param(int idx, std::string name, double data);
             bool add_prior_param(int idx, std::string name, int data);
@@ -320,7 +328,8 @@ namespace optimML{
 
             void constrain_pos(int idx);
             void constrain_01(int idx);
-            
+            //void constrain_bounds(int idx, double low, double high);
+
             virtual bool solve();
             
             void print(int idx, double lower, double upper, double step);
@@ -335,6 +344,9 @@ namespace optimML{
     
             double eval_ll_all();
 
+            double eval_prior(int i);
+            double eval_prior_deriv(int i);
+            double eval_prior_deriv2(int i);
 
     };
 }
