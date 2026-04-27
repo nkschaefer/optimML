@@ -45,6 +45,12 @@ namespace optimML{
             }
         }
     }
+    
+    void em_solver::add_params(vector<double>& params_init){
+        for (int i = 0; i < params_init.size(); ++i){
+            add_one_param(params_init[i]);
+        }
+    }
 
     // Set up solver with initial guesses for parameter values
     em_solver::em_solver(vector<double> params_init){
@@ -61,12 +67,13 @@ namespace optimML{
         this->responsibility_matrix = NULL;
         this->n_obs = -1;
         this->initialized = false;
-        this->delta_thresh = 0.1;
-        this->maxiter = 1000;
+        this->delta_thresh = 1;
+        this->maxiter = 10;
         this->loglik = 0.0;
         this->no_data_yet = true;
         this->solver_global = NULL;
         this->weightsum = 0.0;
+        this->hard = false;
     }
     
     em_solver::em_solver(){
@@ -76,13 +83,14 @@ namespace optimML{
         this->responsibility_matrix = NULL;
         this->n_obs = -1;
         this->initialized = false;
-        this->delta_thresh = 0.1;
-        this->maxiter = 1000;
+        this->delta_thresh = 1;
+        this->maxiter = 10;
         this->loglik = 0.0;
         this->no_data_yet = true;
         this->solver_global = NULL;
         this->weightsum = 0.0;
         this->is_fit = false;
+        this->hard = false;
     }
     
     em_solver::~em_solver(){
@@ -114,6 +122,12 @@ namespace optimML{
         }
     }
     
+    void em_solver::set_hard(bool h){
+        hard = h;
+        // Set a higher default max iter
+        set_maxiter(50);
+    }
+
     void em_solver::set_maxiter(int m){
         maxiter = m;
         if (initialized){
@@ -178,6 +192,7 @@ namespace optimML{
         vector<multivar_func_d>::iterator df = dist_funcs_deriv.begin();
         vector<string>::iterator n = component_names.begin();
         vector<double>::iterator w = component_weights.begin(); 
+        double wsum = 0.0;
         deque<multivar_ml_solver* >::iterator s = solvers.begin();
         while (i <= idx){
             if (i == idx){
@@ -208,15 +223,48 @@ namespace optimML{
         // Fix responsibility matrix
         if (n_obs > 0 && responsibility_matrix != NULL){
             for (int i = 0; i < n_obs; ++i){
-                delete[] this->responsibility_matrix[i];
+                /*
+                 * delete[] this->responsibility_matrix[i];
                 this->responsibility_matrix[i] = NULL;
                 this->responsibility_matrix[i] = new double[this->n_components]; 
+                */
+                double* newrow = new double[this->n_components];
+                double rowsum = 0.0;
+                int newj = 0;
+                for (int j = 0 ; j < this->n_components+1; ++j){
+                    if (j != idx){
+                        rowsum += responsibility_matrix[i][j];
+                        newrow[newj] = responsibility_matrix[i][j];
+                        ++newj;
+                    }
+                }
+                if (rowsum == 0.0){
+                    rowsum = 1.0;
+                }
+                for (int j = 0; j < this->n_components; ++j){
+                    newrow[j] /= rowsum;
+                }
+                delete[] this->responsibility_matrix[i];
+                this->responsibility_matrix[i] = newrow;
             }
         }
-
+        if (initialized){
+            double wsum = 0.0;
+            for (int i = 0; i < n_components; ++i){
+                wsum += component_weights[i];
+            }
+            for (int i = 0; i < n_components; ++i){
+                component_weights[i] /= wsum;
+            }
+        }
+        compute_scores();
         return true;
     }
-
+    
+    /**
+     * This function must be called after adding params and functions
+     * and before adding data.
+     */
     void em_solver::init(){
         if (initialized){
             fprintf(stderr, "ERROR: cannot re-initialize em_solver\n");
@@ -308,10 +356,14 @@ namespace optimML{
             }
             solver_global->add_data("j", data_idx);
             
+            assignments.clear();
+            assignments.reserve(dat.size());
+
             for (int i = 0; i < dat.size(); ++i){
                 vector<double> llrow(n_components, 0.0);
                 lls_tmp.push_back(llrow);
                 lls_tmp_rowsum.push_back(0.0);
+                assignments.push_back(-1);
             }
             no_data_yet = false;
         }
@@ -459,8 +511,8 @@ namespace optimML{
         
         double cstot = 0.0;
         
-        vector<double> log_component_weights;
-        
+        log_component_weights.clear();
+
         for (int j = 0; j < n_components; ++j){
             if (component_weights[j] > 0){
                 // Compute log likelihood of each observation under this model
@@ -479,43 +531,70 @@ namespace optimML{
                 continue;
             }
             double rowmax = 0;
+            int maxcomp = -1;
             for (int j = 0; j < n_components; ++j){
-                if (component_weights[j] > 0.0){
+                //if (component_weights[j] > 0.0){
                     double ll = solvers[j]->data_ll[i] + log_component_weights[j];
                     //double ll = solvers[j]->data_ll[i];
-                    if (ll > rowmax){
+                    if (maxcomp == -1 || ll > rowmax){
                         rowmax = ll;
+                        maxcomp = j;
+                    }
+                //}
+            }
+            assignments[i] = maxcomp;
+            if (hard){
+                for (int j = 0; j < n_components; ++j){
+                    if (j == maxcomp){
+                        responsibility_matrix[i][j] = 1.0;
+                    }
+                    else{
+                        responsibility_matrix[i][j] = 0.0;
                     }
                 }
-            }
-            double rowsum = 0.0;
-            for (int j = 0; j < n_components; ++j){
-                if (component_weights[j] > 0.0){
-                    rowsum += exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowmax);
-                    //rowsum += exp(solvers[j]->data_ll[i] - rowmax);
+                double w = 1.0;
+                if (weights_global.size() > 0){
+                    w = weights_global[i];
                 }
+                compsums[maxcomp] += w;
+                cstot += w;
             }
-            if (rowsum == 0.0){
-                rowsum = 1.0;
-            }
-            rowsum = log(rowsum) + rowmax;
-            for (int j = 0; j < n_components; ++j){
-                if (component_weights[j] == 0.0){
-                    responsibility_matrix[i][j] = 0.0;
-                }
-                else{
-                    responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowsum);
-                    //responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] - rowsum);
-                    double w = 1.0;
-                    if (weights_global.size() > 0){
-                        w = weights_global[i];
+            else{
+                double rowsum = 0.0;
+                for (int j = 0; j < n_components; ++j){
+                    if (component_weights[j] > 0.0){
+                        rowsum += exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowmax);
+                        //rowsum += exp(solvers[j]->data_ll[i] - rowmax);
                     }
-                    compsums[j] += w * responsibility_matrix[i][j];
-                    cstot += w * responsibility_matrix[i][j];
+                }
+                if (rowsum == 0.0){
+                    rowsum = 1.0;
+                }
+                rowsum = log(rowsum) + rowmax;
+                double w = 1.0;
+                if (weights_global.size() > 0){
+                    w = weights_global[i];
+                }
+                
+                for (int j = 0; j < n_components; ++j){
+                    if (component_weights[j] == 0.0){
+                        responsibility_matrix[i][j] = 0.0;
+                    }
+                    else{
+                        responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] + log_component_weights[j] - rowsum);
+                        //responsibility_matrix[i][j] = exp(solvers[j]->data_ll[i] - rowsum);
+                        
+                        compsums[j] += w * responsibility_matrix[i][j];
+                        cstot += w * responsibility_matrix[i][j];
+                    }
                 }
             }
         }
         
+        if (cstot == 0){
+            cstot = 1.0;
+        }
+
         // Update weights of components
         for (int j = 0; j < n_components; ++j){
             component_weights[j] = compsums[j] / cstot;
@@ -545,7 +624,22 @@ namespace optimML{
         return solver_global->log_likelihood;
     }
      
-       
+    /**
+     * Returns a vector with one entry per component.
+     * 
+     * The entry represents the fraction of that component's weight for which
+     * the component was the highest-probability component for an observation.
+     *
+     * In other words, the numerator is the sum of responsibility matrix entries where
+     *  the component is the best choice, divided by the sum of responsibility matrix
+     *  entries for the component (column sum).
+     *
+     * The idea is that a component could achieve relatively high weight either by
+     *   being the likeliest source of some observations, or by being a moderately
+     *   likely source of many observations. The latter situation is undesirable because
+     *   it means we have probably included too many model components: we want components
+     *   to be either very high or very low probability for all observations.
+     */
     std::vector<double> em_solver::frac_p_components(){
         if (!is_fit){
             fprintf(stderr, "ERROR: must fit first\n");
@@ -699,10 +793,22 @@ namespace optimML{
          
         double llmax = 0.0;
         
+        if (hard){
+            if (assignments[idx] < 0){
+                return 0.0;
+            }
+            int a = assignments[idx];
+            if (component_weights[a] == 0.0){
+                return 0.0;
+            }
+            lls_tmp[idx][a] = log_component_weights[a] + this->dist_funcs[a](params, data_d, data_i);
+            lls_tmp_rowsum[idx] = lls_tmp[idx][a];
+            return lls_tmp[idx][a];
+        }
+        
         for (int j = 0; j < n_components; ++j){
             if (component_weights[j] > 0.0){
-                
-                lls_tmp[idx][j] = log(component_weights[j]) + 
+                lls_tmp[idx][j] = log_component_weights[j] + 
                     this->dist_funcs[j](params, data_d, data_i);
                 if (llmax == 0.0 || lls_tmp[idx][j] > llmax){
                     llmax = lls_tmp[idx][j];
@@ -718,8 +824,8 @@ namespace optimML{
         
         double llsum = 0.0;
         for (int j = 0; j < n_components; ++j){
-            if (component_weights[j] > 0.0){
-                llsum += exp(lls_tmp[idx][j] - llmax);
+            if (component_weights[j] > 0.0 && responsibility_matrix[idx][j] > 0.0){
+                llsum += responsibility_matrix[idx][j] * exp(lls_tmp[idx][j] - llmax);
             }
         }
         
@@ -743,18 +849,231 @@ namespace optimML{
             return;
         }
         
+        if (hard){
+            if (assignments[idx] >= 0){
+                vector<double> dtmp(results.size(), 0.0);
+                this->dist_funcs_deriv[assignments[idx]](params, data_d, data_i, dtmp);
+                for (int i = 0; i < n_params; ++i){
+                    results[i] += dtmp[i];
+                }
+            }
+            return;
+        }
+
         for (int j = 0; j < n_components; ++j){
             if (component_weights[j] > 0.0){
                 vector<double> dtmp(results.size(), 0.0);
                 this->dist_funcs_deriv[j](params, data_d, data_i, dtmp);
                 for (int i = 0; i < n_params; ++i){
-                    results[i] += exp(lls_tmp[idx][j] - lls_tmp_rowsum[idx]) * dtmp[i];
-                    //results[i] += responsibility_matrix[idx][j] * dtmp[i];
+                    //results[i] += exp(lls_tmp[idx][j] - lls_tmp_rowsum[idx]) * dtmp[i];
+                    results[i] += responsibility_matrix[idx][j] * dtmp[i];
                 }
             }
         }
     }
-   
+    /*
+     *
+    void em_solver::test_cutoffs(){
+        
+        vector<pair<double, int> > wsort;
+        for (int i = 0; i < n_components; ++i){
+            wsort.push_back(make_pair(-component_weights[i], i));
+        }
+        sort(wsort.begin(), wsort.end());
+        vector<set<int> > included(wsort.size());
+        for (int x = 0; x < wsort.size(); ++x){
+            int target_j = wsort[x].second;
+            for (int y = 0; y <= x; ++y){
+                included[target_j].insert(wsort[y].second);
+            }
+        }
+
+        vector<double> llsums;
+        vector<double> entsums;
+        vector<double> costs;
+        vector<double> benefits;
+        vector<double> costs2;
+        vector<double> benefits2;
+        for (int i = 0; i < n_components; ++i){
+            llsums.push_back(0.0);
+            entsums.push_back(0.0);
+            costs.push_back(0.0);
+            benefits.push_back(0.0);
+            costs2.push_back(0.0);
+            benefits2.push_back(0.0);
+
+        }
+        vector<double> costs3(n_components, 0.0);
+        vector<double> benefits3(n_components, 0.0);
+         
+        double wsum = 0.0;
+
+        for (int i = 0; i < n_obs; ++i){
+            double w = 1.0;
+            if (weights_global.size() > 0){
+                w = weights_global[i];
+            }
+            if (w == 0){
+                continue;
+            }
+            int maxj = -1;
+            double maxp = 0.0;
+            for (int j = 0; j < n_components; ++j){
+                if (component_weights[j] > 0.0){
+                    if (maxj == -1 || responsibility_matrix[i][j] > maxp){
+                        maxj = j;
+                        maxp = responsibility_matrix[i][j];
+                    }
+                }
+            }
+            wsum += w;
+            for (int j = 0; j < n_components; ++j){
+                if (j == maxj){
+                    benefits3[j] += w*responsibility_matrix[i][j];
+                }
+                else{
+                    costs3[j] += w*responsibility_matrix[i][j];
+                }
+                for (int k = 0; k < n_components; ++k){
+                    if (included[j].find(k) != included[j].end()){
+                        // Part of the group.
+                        if (k == maxj){
+                            benefits2[j] += w * responsibility_matrix[i][k];
+                        }
+                        else{
+                            costs[j] += w * responsibility_matrix[i][k];
+                        }
+                    }
+                    else{
+                        // Not part of the group.
+                        if (k == maxj){
+                            costs2[j] += w * responsibility_matrix[i][k];
+                        }
+                        else{
+                            benefits[j] += w * responsibility_matrix[i][k];
+                        }
+                    }
+                }
+            }
+            for (int x = 0; x < wsort.size(); ++x){
+                int target_j = wsort[x].second;
+                double tot = 0.0;
+                for (int y = 0; y <= x; ++y){
+                    tot += responsibility_matrix[i][wsort[y].second];
+                }
+                vector<double> rmrow;
+                bool maxp_included = false;
+                for (int y = 0; y <= x; ++y){
+                    if (maxp == wsort[y].second){
+                        maxp_included = true;
+                    }
+                    double rm = responsibility_matrix[i][wsort[y].second] / tot;
+                    entsums[target_j] += w * rm * log(rm);
+                    llsums[target_j] += w * rm * solvers[wsort[y].second]->data_ll[i];
+                }
+            }
+        }
+        fprintf(stderr, "WSORT %ld\n", wsort.size()); 
+        for (int x = 0; x < wsort.size(); ++x){
+            int i = wsort[x].second;
+            double ll = llsums[i];
+            double ent = -entsums[i];
+            double k = (double)(params.size() + x);
+            double bic = k*log(wsum) - 2*ll;
+            fprintf(stdout, "%s\t%f\t%f\t%f\n", component_names[i].c_str(), component_weights[i],
+                costs3[i], benefits3[i]);
+            //fprintf(stdout, "%s\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n", component_names[i].c_str(), 
+            //    component_weights[i], llsums[i], bic, -entsums[i], benefits[i], costs[i], benefits2[i], costs2[i],
+            //    benefits3[i], costs3[i]);
+        }
+    }
+    */
+
+    void em_solver::compute_scores(){
+        
+        double llsum = 0.0;
+        double iclsum = 0.0;
+        double wsum = 0.0;
+        
+        vector<pair<double, int> > wsort;
+        // Also calculate classification entropy
+        entropy = 0.0;
+        
+        weights_hard.clear(); 
+        component_ll.clear();
+        vector<double> component_wsum;
+        for (int j = 0; j < n_components; ++j){
+            component_ll.push_back(0.0);
+            component_wsum.push_back(0.0);
+            weights_hard.push_back(0.0);
+            wsort.push_back(make_pair(-component_weights[j], j));
+            if (component_weights[j] > 0.0){
+                solvers[j]->eval_ll_all();
+            }
+        }
+
+        sort(wsort.begin(), wsort.end());
+
+        for (int i = 0; i < n_obs; ++i){
+            double w = 1.0;
+            if (weights_global.size() > 0){
+                if (weights_global[i] == 0.0){
+                    continue;
+                }
+                else{
+                    w = weights_global[i];
+                    wsum += w;
+                }
+            }
+            else{
+                wsum += w;
+            }
+
+            int maxcomp = -1;
+            double maxp = 0.0;
+            double llrow = 0.0;
+            int secondmax = -1;
+            
+
+            for (int j = 0; j < n_components; ++j){
+                if (component_weights[j] > 0.0){
+                    llrow += log_component_weights[j] + solvers[j]->data_ll[i];        
+                    if (maxcomp == -1 || responsibility_matrix[i][j] > maxp){
+                        secondmax = maxcomp;
+                        maxcomp = j;
+                        maxp = responsibility_matrix[i][j];
+                    }
+                }
+
+            }
+            if (maxcomp != -1){
+                
+                component_ll[maxcomp] += w * responsibility_matrix[i][maxcomp];
+                weights_hard[maxcomp] += w*1.0;
+                llsum += w*llrow;
+            }
+        }
+
+        double l_nobs;
+        if (wsum == 0.0){
+            wsum = 1.0;
+            l_nobs = log((double)n_obs);
+        }
+        else{
+            l_nobs = log(wsum);
+        }
+        
+        double n_params = (double)(n_components-1 + params.size());
+        aic = 2.0*n_params - 2.0*llsum;
+        bic = l_nobs*n_params -2.0*llsum;
+        
+        double n_params_rm = (double)(n_components-2 + params.size());
+
+        for (int j = 0; j < n_components; ++j){
+            weights_hard[j] /= wsum;
+        }
+    }
+
     double em_solver::fit(){
         // Make sure all have even weight - in case this was run previously
         for (int i = 0; i < n_components; ++i){
@@ -778,14 +1097,18 @@ namespace optimML{
             }
         }
         
-        // Compute BIC & AIC
+        // Compute BIC, AIC, ICL, and entropy
+        compute_scores();
+        /*        
+        double n_params = (double)(n_components-1 + params.size());
         if (weightsum > 0.0){
-            bic = (double)(n_components-1 + params.size())*log(weightsum) - 2.0*llprev;
+            bic = n_params*log(weightsum) - 2.0*llprev;
         }
         else{
-            bic = (double)(n_components-1 + params.size())*log((double)n_obs) - 2.0*llprev;
+            bic = n_params*log((double)n_obs) - 2.0*llprev;
         }
-        aic = 2.0 * (double)(n_components-1 + params.size()) - 2.0*llprev;
+        aic = 2.0 * n_params - 2.0*llprev;
+        */
         loglik = llprev;
         
         // Copy results from solver
@@ -801,6 +1124,18 @@ namespace optimML{
         // Re-set parameters to their original values
         for (int i = 0; i < params_orig.size(); ++i){
             set_param(i, params_orig[i]);
+        }
+    }
+    
+    void em_solver::print_rm(){
+        if (responsibility_matrix != NULL){
+            for (int i = 0; i < n_obs; ++i){
+                fprintf(stdout, "%f", responsibility_matrix[i][0]);
+                for (int j = 1; j < n_components; ++j){
+                    fprintf(stdout, "\t%f", responsibility_matrix[i][j]);
+                }
+                fprintf(stdout, "\n");
+            }
         }
     }
 
@@ -838,7 +1173,7 @@ namespace optimML{
 
         vector<int> comp_rm;
 
-        while (n_components > 1){
+        //while (n_components > 1){
             map<pair<int, int>, double> corr_num;
             map<int, double> corr_denom;
             for (int i = 0; i < component_weights.size(); ++i){
@@ -880,6 +1215,7 @@ namespace optimML{
             double maxpos = 0.0;
             int maxposcomp = -1;
             map<int, double> r2sumpos;
+            
             for (map<pair<int, int>, double>::iterator cn = corr_num.begin(); cn != corr_num.end(); ++cn){
                 cn->second /= wsum;
                 // Calculate Pearson correlation
@@ -915,14 +1251,14 @@ namespace optimML{
                 // Eliminate the chosen component.
                 //rm_component(maxposcomp);
                 
-                reset_params(); 
-                fit();
+                //reset_params(); 
+                //fit();
             }
             else{
                 // Finished
                 return comp_rm;
             }
-        }
+        //}
         // Ran out of components to eliminate
         return comp_rm;
     }
@@ -932,13 +1268,12 @@ namespace optimML{
             return;
         }
         fprintf(stderr, "LL = %.3f BIC %.3f AIC %.3f\n", loglik, bic, aic);
-        fprintf(stderr, "  data weight sum %f\n", weightsum);
         fprintf(stderr, "  Params:\n");
         for (int i = 0; i < results.size(); ++i){
             fprintf(stderr, "    %d) %f\n", i, results[i]);   
         }
         fprintf(stderr, "  Component weights:\n");
-        double ws = 0.0;
+        //double ws = 0.0;
         for (int i = 0; i < n_components; ++i){
             fprintf(stderr, "    ");
             if (component_names[i] != ""){
@@ -947,9 +1282,9 @@ namespace optimML{
             else{
                 fprintf(stderr, "%d) ", i);
             }
-            ws += component_weights[i];
-            fprintf(stderr, "%f\n", component_weights[i]);
+            //ws += component_weights[i];
+            fprintf(stderr, "%f hard %f (%.3f)\n", component_weights[i],
+                weights_hard[i], weights_hard[i]/component_weights[i]);
         }
-        fprintf(stderr, "  sum %f\n", ws);
     }    
 }

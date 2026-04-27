@@ -22,19 +22,16 @@
 #include "multivar_ml.h"
 
 namespace optimML{
-    
+    /*    
     // Function to be used in solving a system of equations. 
     typedef std::function< double ( const std::vector<double>& ) > multivar_sys_func;
     // Derivative of above
     typedef std::function< void ( const std::vector<double>&, std::vector<double>& ) > multivar_sys_func_d;
-   
-    // Solves a multivariate system of equations.
-    
-    // Uses BFGS to minimize the sum of squared differences between equation evaluations
-    // and true RHS values.
-    
-    // Works by wrapping multivar_ml_solver and using it to minimize the sum of squared
-    // differences instead of to maximize log likelihood.
+    */
+
+    // Fits mixture models using the EM algorithm. Instead of each component having its own parameters
+    // that are updated by the method of moments (fast), however, each component can depend on 
+    // a set of global parameters that are updated via maximum likelihood. 
 
     class em_solver{
         
@@ -77,8 +74,8 @@ namespace optimML{
             
             bool initialized;
             bool is_fit;
+            bool hard;
 
-            std::vector<double> weights_global;
             double weightsum;
 
             bool no_data_yet = true;
@@ -86,8 +83,13 @@ namespace optimML{
             std::vector<std::vector<double> > lls_tmp;
             std::vector<double> lls_tmp_rowsum;
             
+            std::vector<double> log_component_weights;
+            
+            void compute_scores();
 
         public:
+            
+            std::vector<double> weights_global;
             std::vector<double> component_weights;
             std::vector<double> compsums;
 
@@ -96,6 +98,7 @@ namespace optimML{
             int n_components; 
             int n_obs;
             void add_one_param(double p);
+            void add_params(std::vector<double>& p);
             void set_param(int param_idx, double p);
 
             // Initialize with initial guesses of parameters
@@ -148,6 +151,7 @@ namespace optimML{
             void set_threads(int nt);
             void set_bfgs_threads(int nt);
             void set_maxiter(int m);
+            void set_hard(bool h);
 
             bool constrain_pos(int idx);
             bool constrain_01(int idx);
@@ -162,13 +166,21 @@ namespace optimML{
             double fit();
             
             std::vector<int> rm_correlated_components();
+            std::vector<short> assignments;
 
             double loglik;
             double bic;
             double aic;
-            
+            double icl;
+            double entropy;
+            std::vector<double> component_entropy;
+            std::vector<double> component_ll;
+            std::vector<double> weights_hard;
+            std::vector<double> delta_icl;
+            std::vector<double> delta_entropy;
             void print();
-
+            void print_rm();
+            void test_cutoffs();
     };
 
 }

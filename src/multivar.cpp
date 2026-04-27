@@ -266,13 +266,14 @@ namespace optimML{
                 constrain_01(i);
             }
             else if (this->trans_bounds[i]){
-                this->trans_log[i] = false;
+                /*this->trans_log[i] = false;
                 this->trans_logit[i] = false;
                 this->trans_bounds[i] = false;
                 if (bounds.count(i) > 0){
                     bounds.erase(i);
                 }
                 constrain_bounds(i, bounds[i].first, bounds[i].second); 
+                */
             }
         }
         return true;
