@@ -24,14 +24,32 @@ using namespace std;
  * Logit transform (quantile function of logistic distribution)
  */
 double logit(double x){
-    return log(x/(1.0-x));
+    return log(x) - log(1.0-x);
+    //return log(x/(1.0-x));
 }
 
 /**
  * Inverse logit function / Expit function / Logistic function
  */
-double expit(double x){
-   return 1.0/(1.0 + exp(-x));
+double expit(double num){
+   double val;
+    if (num >= 0) {
+        double z = exp(-num);
+        val = 1.0 / (1.0 + z);
+    } else {
+        double z = exp(num);
+        val = z / (1.0 + z);
+    }
+    
+    double bumper = 1e-8;
+    if (val < bumper){
+        val = bumper;
+    }
+    else if (val > 1.0-bumper){
+        val = 1.0 - bumper;
+    }
+    return val;
+    //return 1.0/(1.0 + exp(-x));
 }
 
 /**
