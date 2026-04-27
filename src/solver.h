@@ -60,6 +60,18 @@ namespace optimML{
                 const std::map<std::string, int>& params_i);
             static double d2ll_prior_poisson(double x, const std::map<std::string, double>& params_d,
                 const std::map<std::string, int>& params_i); 
+            static double ll_prior_cauchy(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
+            static double dll_prior_cauchy(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
+            static double d2ll_prior_cauchy(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
+            static double ll_prior_lognormal(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
+            static double dll_prior_lognormal(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
+            static double d2ll_prior_lognormal(double x, const std::map<std::string, double>& params_d,
+                const std::map<std::string, int>& params_i);
 
             static double dummy_prior_func(double x, const std::map<std::string, double>& params_d,
                 const std::map<std::string, int>& params_i);   
@@ -154,9 +166,13 @@ namespace optimML{
             void store_ll_data_points(bool val);
 
             bool add_data(std::string name, std::vector<double>& data);
+            bool replace_data(std::string name, std::vector<double>& data);
             bool add_data(std::string name, std::vector<int>& data);
+            bool replace_data(std::string name, std::vector<int>& data);
             bool add_data_fixed(std::string name, double data);
+            bool replace_data_fixed(std::string name, double data);
             bool add_data_fixed(std::string name, int data);
+            bool replace_data_fixed(std::string name, int data);
             
             bool add_weights(std::vector<double>& weights);
             bool update_weights(std::vector<double>& weights);

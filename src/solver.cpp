@@ -196,6 +196,65 @@ namespace optimML{
         double l = params_d.at("lambda");
         return -x/(l*l);
     }
+    
+    double solver::ll_prior_cauchy(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        double x0 = params_d.at("x0");
+        double gamma = params_d.at("gamma");
+        return -log(M_PI*gamma) - log(1.0 + pow((x-x0)/gamma, 2));
+    }
+
+    double solver::dll_prior_cauchy(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        double x0 = params_d.at("x0");
+        double gamma = params_d.at("gamma");
+        double x_x0 = x-x0;
+        return -(2*x - 2*x0)/(gamma*gamma + x_x0*x_x0);
+    }
+
+    double solver::d2ll_prior_cauchy(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        double x0 = params_d.at("x0");
+        double gamma = params_d.at("gamma");
+        double x_x0 = x - x0;
+        double x_x0_2 = x_x0*x_x0;
+        double g2 = gamma*gamma;
+        return (2*(x_x0_2 - g2))/pow(g2 + x_x0_2, 2);
+    }
+
+    double solver::ll_prior_lognormal(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        if (x < 1e-8){
+            x = 1e-8;
+        }
+        double lmu = params_d.at("lmu");
+        double lsigma = params_d.at("lsigma");
+        double term1 = log(1.0/(x * lsigma * sqrt(2.0 * M_PI)));
+        double term2 = pow(log(x) - lmu, 2)/(2 * lsigma * lsigma);
+        return term1 - term2;
+    }
+
+    double solver::dll_prior_lognormal(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        if (x < 1e-8){
+            x = 1e-8;
+        }
+        double lmu = params_d.at("lmu");
+        double lsigma = params_d.at("lsigma");
+        double ls2 = lsigma*lsigma;
+        return -(ls2 - lmu + log(x))/(ls2*x);
+    }
+    
+    double solver::d2ll_prior_lognormal(double x, const map<string, double>& params_d,
+        const map<string, int>& params_i){
+        if (x < 1e-8){
+            x = 1e-8;
+        }
+        double lmu = params_d.at("lmu");
+        double lsigma = params_d.at("lsigma");
+        double ls2 = lsigma*lsigma;
+        return (ls2 - lmu + log(x) - 1.0)/(ls2*x*x);
+    }
 
     /**
      * Placeholder to fill in prior function arrays until replaced with 
@@ -248,6 +307,43 @@ namespace optimML{
         }
         return true;
     }
+    
+    /**
+     * If already added a column of data keyed to a specific name, this function allows
+     * the user to replace the data keyed to that name with a new column of data, 
+     * as quickly as possible.
+     */
+    bool solver::replace_data(string name, std::vector<double>& dat){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (param_double_cur.count(name) == 0){
+            fprintf(stderr, "ERROR: solver has no data keyed to %s\n", name.c_str());
+            return false;
+        }
+        
+        // Make sure dimensions agree
+        int nd = dat.size();
+        if (this->n_data != 0 && this->n_data != nd){
+            fprintf(stderr, "ERROR: data vectors do not have same dimensions\n");
+            return false;
+        }
+        
+        int idx = -1;
+        for (int i = 0; i < this->params_double_names.size(); ++i){
+            if (this->params_double_names[i] == name){
+                idx = i;
+                break;
+            }
+        }
+        if (idx == -1){
+            fprintf(stderr, "ERROR: cannot replace fixed-value data with multi-value data.\n");
+            return false;
+        }
+        this->params_double_vals[idx] = dat.data();
+        return true;
+    }
 
     bool solver::add_data(string name, std::vector<int>& dat){
         if (!initialized){
@@ -284,6 +380,38 @@ namespace optimML{
         return true;
     }
    
+    bool solver::replace_data(string name, std::vector<int>& dat){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (param_int_cur.count(name) == 0){
+            fprintf(stderr, "ERROR: solver has no data keyed to %s\n", name.c_str());
+            return false;
+        }
+        
+        // Make sure dimensions agree
+        int nd = dat.size();
+        if (this->n_data != 0 && this->n_data != nd){
+            fprintf(stderr, "ERROR: data vectors do not have same dimensions\n");
+            return false;
+        }
+        
+        int idx = -1;
+        for (int i = 0; i < this->params_int_names.size(); ++i){
+            if (this->params_int_names[i] == name){
+                idx = i;
+                break;
+            }
+        }
+        if (idx == -1){
+            fprintf(stderr, "ERROR: cannot replace fixed-value data with multi-value data.\n");
+            return false;
+        }
+        this->params_int_vals[idx] = dat.data();
+        return true;
+    }
+
     int solver::get_n_data(){
         return n_data;
     }
@@ -305,6 +433,31 @@ namespace optimML{
         }
         return true;
     }
+    
+    bool solver::replace_data_fixed(string name, double dat){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (param_double_cur.count(name) == 0){
+            fprintf(stderr, "ERROR: no data keyed to %s\n", name.c_str());
+            return false;
+        }
+        // Make sure this did not already have associated multi-value data.
+        int idx = -1;
+        for (int i = 0; i < this->params_double_names.size(); ++i){
+            if (this->params_double_names[i] == name){
+                idx = i;
+                break;
+            }
+        }
+        if (idx == -1){
+            fprintf(stderr, "ERROR: cannot replace multi-value data with fixed value data.\n");
+            return false;
+        }
+        this->param_double_cur[name] = dat;
+        return true;
+    }
 
     bool solver::add_data_fixed(string name, int dat){
         if (!initialized){
@@ -324,6 +477,30 @@ namespace optimML{
         return true;
     }
     
+    bool solver::replace_data_fixed(string name, int dat){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (param_int_cur.count(name) == 0){
+            fprintf(stderr, "ERROR: no data keyed to %s\n", name.c_str());
+            return false;
+        }
+        // Make sure this did not already have associated multi-value data.
+        int idx = -1;
+        for (int i = 0; i < this->params_int_names.size(); ++i){
+            if (this->params_int_names[i] == name){
+                idx = i;
+                break;
+            }
+        }
+        if (idx == -1){
+            fprintf(stderr, "ERROR: cannot replace multi-value data with fixed value data.\n");
+            return false;
+        }
+        this->param_int_cur[name] = dat;
+        return true;
+    }
     /**
      * If the user has only provided fixed data (and no regular type data), 
      * treat the fixed data like regular data.
