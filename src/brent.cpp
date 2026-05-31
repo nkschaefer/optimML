@@ -122,7 +122,35 @@ bool optimML::brent_solver::golden(){
  * Fits a quadratic polynomial and finds a candidate step to take
  */
 double optimML::brent_solver::quadfit(bool& success){
-    
+    double h_a = b - a;
+    double h_c = c - b;
+    double num = (f_b - f_a) * h_c * h_c - (f_b - f_c) * h_a * h_a;
+    double denom = 2.0 * (h_a * (f_b - f_c) + h_c * (f_b - f_a));
+
+    if (fabs(denom) < 1e-300){
+        success = false;
+        return 0;
+    }
+
+    double step = num / denom;
+
+    if (b + step > a && b + step < c){
+        success = true;
+        return step;
+    }
+    else{
+        success = false;
+        return 0;
+    }
+
+
+
+
+
+
+
+
+    /*
     double x = f_b/f_c;
     double y = f_b/f_a;
     double z = f_a/f_c;
@@ -134,16 +162,17 @@ double optimML::brent_solver::quadfit(bool& success){
         return 0;
     }
     else{
-        double new_b = b + num/denom;
+        double new_b = b - num/denom;
         if (new_b > a && new_b < c){
             success = true;
-            return num/denom;
+            return -num/denom;
         }
         else{
             success = false;
             return 0;
         }
     }
+    */
 }
 
 /**
@@ -189,12 +218,14 @@ double optimML::brent_solver::quadfit2(bool& success){
  * golden section search.
  */
 bool optimML::brent_solver::interpolate_root(){
-    if (f_b == 0 || c-b < xval_precision){
+    if (f_b == 0 || c-a < 2.0 * xval_precision){
         return true;
     }
-    if (b - a < xval_precision){
+    
+    /*if (b - a < xval_precision){
         return true;
     }
+    */
     bool interp_success;
     double step = quadfit2(interp_success);
     if (interp_success){
@@ -252,9 +283,14 @@ bool optimML::brent_solver::interpolate_root(){
         b += step;
         f_b = eval_ll_x(b);
     }
+    if (c - a < 2.0 * xval_precision){
+        return true;
+    }
+    /*
     if (abs(step) < xval_precision){
         return true;
     }
+    */
     return false;
 }
 
@@ -263,17 +299,22 @@ bool optimML::brent_solver::interpolate_root(){
  * information, which uses golden section search as a fallback.
  */
 bool optimML::brent_solver::interpolate(){
-    if (b - a < xval_precision){
+    if (c - a < 2.0 * xval_precision){
         return true;
     }
     bool interp_success;
-    double step = -quadfit(interp_success);
+    double step = quadfit(interp_success);
     if (interp_success && (step_2ago == 0.0 || abs(step) < 0.5*step_2ago)){
         double x = step + b;
+        if (c - a < 2.0 * xval_precision){
+            return true;
+        }
+        /*
         if (abs(x-b) < xval_precision){
             b = (x + b)/2.0;
             return true;
         }
+        */
         else{
             double f_x = eval_ll_x(x);
             step_2ago = step_prev;
@@ -326,19 +367,24 @@ bool optimML::brent_solver::interpolate(){
  * One iteration of Brent's method for maximization using first derivative information
  */
 bool optimML::brent_solver::interpolate_der(){
-    
+    if (c - a < 2.0 * xval_precision){
+        return true;
+    }
+    /*
     if (b - a < xval_precision){
         return true;
     }
+    */
 
     bool interp_success;
     
-    double step = -quadfit(interp_success);
+    double step = quadfit(interp_success);
     
     if (interp_success && (step_2ago == 0.0 || abs(step) < 0.5*step_2ago)){
         double x = step + b;
         double f_x = eval_ll_x(x);
-        if (abs(x-b) < xval_precision){
+        //if (abs(x-b) < xval_precision){
+        if (c - a < 2.0 * xval_precision){
             b = (x + b)/2.0;
             return true;
         }
@@ -632,6 +678,8 @@ double optimML::brent_solver::solve(double lower, double upper, bool attempt_bra
         }
     }
     
+    root_found = false;
+
     if (nthread > 0){
         create_threads();
     }
@@ -896,7 +944,6 @@ transformation of the data.\n", lower, upper);
         ++nits;
     }
     //fprintf(stderr, "nits %d\n", nits);
-    
     this->root_found = converged;
     double b_t = b;
 
