@@ -21,13 +21,78 @@
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <stdexcept>
 
 // ===== Base class for solvers =====
 
 namespace optimML{
     
+    // Exception class for math issues
+    class math_error: public std::exception{
+        public:
+            int param_idx;
+            bool deriv;
+            bool deriv2;
+            bool prior;
+            std::string message;
+            std::map<std::string, double> data_d;
+            std::map<std::string, int> data_i;
+            std::vector<double> params;
+
+            math_error(int pi, 
+                    bool d, 
+                    bool d2, 
+                    bool p, 
+                    const std::map<std::string, double>& dd,
+                    const std::map<std::string, int>& di, 
+                    const std::vector<double>& pa, 
+                    const std::string& msg){
+                
+                param_idx = pi;
+                deriv = d;
+                deriv2 = d2;
+                prior = p;
+                message = msg;
+                data_d = dd;
+                data_i = di;
+                params = pa;
+                
+                char buf[1024];
+                if (param_idx == -1){
+                    std::string line = "\n  Parameters:\n";
+                    message += line;
+                    for (int i = 0 ; i < params.size(); ++i){
+                        sprintf(&buf[0], "    %d) %f\n", i, params[i]);
+                        std::string tmp = &buf[0];
+                        message += tmp;
+                    }
+                }
+                else{
+                    sprintf(&buf[0], "\n  Param %d) %f\n", param_idx, params[param_idx]);
+                    std::string tmp = &buf[0];
+                    message += tmp;
+                }
+                std::string line = "  Data:\n";
+                message += line;
+                for (std::map<std::string, double>::const_iterator dd = data_d.begin();
+                    dd != data_d.end(); ++dd){
+                    sprintf(&buf[0], "    %s) %f\n", dd->first.c_str(), dd->second);
+                    std::string tmp = &buf[0];
+                    message += tmp;
+                }
+                for (std::map<std::string, int>::const_iterator di = data_i.begin();
+                    di != data_i.end(); ++di){
+                    sprintf(&buf[0], "    %s) %d\n", di->first.c_str(), di->second);
+                    std::string tmp = &buf[0];
+                    message += tmp; 
+                }
+            };
+            const char* what() const noexcept override{
+                return message.c_str();
+            };
+    };    
     // Exception code for math issues
-    const int OPTIMML_MATH_ERR = 123;
+    //const int OPTIMML_MATH_ERR = 123;
 
     // Function for prior distributions over individual x variables
     typedef std::function< double( double,

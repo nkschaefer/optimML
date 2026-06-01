@@ -91,7 +91,7 @@ namespace optimML{
                 fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
             }
         }
-        throw optimML::OPTIMML_MATH_ERR; 
+        //throw optimML::OPTIMML_MATH_ERR; 
     }
     
     void univar::dump_prior_params(){
@@ -106,7 +106,7 @@ namespace optimML{
                 fprintf(stderr, "%s = %d\n", it->first.c_str(), it->second);
             }
         }
-        throw optimML::OPTIMML_MATH_ERR;
+        //throw optimML::OPTIMML_MATH_ERR;
     }
     
     double univar::safe_x(double x){
@@ -215,7 +215,13 @@ namespace optimML{
                         //fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
                         //fprintf(stderr, "parameter: %f\n", x_t);
                         //dump_cur_params();
-                        throw optimML::OPTIMML_MATH_ERR;
+                        //throw optimML::OPTIMML_MATH_ERR;
+                        vector<double> tmp{ x_t };
+                        throw optimML::math_error(0, false, false, false, 
+                            param_double_cur,
+                            param_int_cur,
+                            tmp,
+                            "Log likelihood is NaN or inf for single-parameter system.");
                     }
                     if (ll_data_points){
                         data_ll[i] = y;
@@ -228,7 +234,13 @@ namespace optimML{
                         //fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
                         //fprintf(stderr, "parameter: %f\n", x_t);
                         //dump_cur_params(); 
-                        throw optimML::OPTIMML_MATH_ERR;
+                        //throw optimML::OPTIMML_MATH_ERR;
+                        vector<double> tmp{ x_t };
+                        throw optimML::math_error(0, true, false, false, 
+                            param_double_cur,
+                            param_int_cur,
+                            tmp,
+                            "Derivative is NaN or inf for single-parameter system.");
                     }
                     cur_dll_dx += yprime * w * df_dt_x;
                 }
@@ -238,7 +250,13 @@ namespace optimML{
                         //fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
                         //fprintf(stderr, "parameter: %f\n", x_t);
                         //dump_cur_params();  
-                        throw optimML::OPTIMML_MATH_ERR;    
+                        //throw optimML::OPTIMML_MATH_ERR;    
+                        vector<double> tmp{ x_t };
+                        throw optimML::math_error(0, false, true, false, 
+                            param_double_cur,
+                            param_int_cur,
+                            tmp,
+                            "Second derivative is NaN or inf for single-parameter system.");
                     }
                     if (trans_log || trans_logit || trans_bounds){
                         cur_d2ll_dx2 += w * (yprime2 * df_dt_x * df_dt_x + yprime * d2f_dt2_x);
@@ -268,7 +286,13 @@ namespace optimML{
                     //fprintf(stderr, "ERROR: illegal value from prior function\n");
                     //fprintf(stderr, "parameter: %f\n", x_t);
                     //dump_prior_params();
-                    throw optimML::OPTIMML_MATH_ERR;
+                    //throw optimML::OPTIMML_MATH_ERR;
+                    vector<double> tmp{ x_t };
+                    throw optimML::math_error(0, false, false, true, 
+                        params_prior_double,
+                        params_prior_int,
+                        tmp,
+                        "Prior log likelihood is NaN or inf for single-parameter system.");
                 }
                 cur_ll_x += yprior;
             }
@@ -278,7 +302,13 @@ namespace optimML{
                     //fprintf(stderr, "ERROR: illegal value from first derivative prior function\n");
                     //fprintf(stderr, "parameter: %f\n", x_t);
                     //dump_prior_params();
-                    throw optimML::OPTIMML_MATH_ERR;
+                    //throw optimML::OPTIMML_MATH_ERR;
+                    vector<double> tmp{ x_t };
+                    throw optimML::math_error(0, true, false, true,
+                        params_prior_double,
+                        params_prior_int,
+                        tmp,
+                        "Prior first derivative is NaN or inf for single-parameter system.");
                 }
                 cur_dll_dx += yprime_prior * df_dt_x;
             }
@@ -289,7 +319,13 @@ namespace optimML{
                     //fprintf(stderr, "ERROR: illegal value from second derivative prior function\n");
                     //fprintf(stderr, "parameter: %f\n", x_t);
                     //dump_prior_params();  
-                    throw optimML::OPTIMML_MATH_ERR;
+                    //throw optimML::OPTIMML_MATH_ERR;
+                    vector<double> tmp{ x_t };
+                    throw optimML::math_error(0, false, true, true,
+                        params_prior_double,
+                        params_prior_int,
+                        tmp,
+                        "Prior second derivative is NaN or inf for single-parameter system.");
                 } 
                 if (trans_log || trans_logit || trans_bounds){
                     cur_d2ll_dx2 += yprime2_prior * df_dt_x * df_dt_x + yprime_prior * d2f_dt2_x;
@@ -452,9 +488,17 @@ for prior. Second derivatives will not be calculated.\n");
                 double y = ll_x(x_t, this->params_double_cur_thread[thread_idx], 
                     this->params_int_cur_thread[thread_idx]);
                 if (isnan(y) || isinf(y)){
-                    fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_cur_params(); 
+                    vector<double> tmp{ x_t };
+                    throw optimML::math_error(0,
+                        false, false, false,
+                        param_double_cur,
+                        param_int_cur,
+                        tmp,
+                        "NaN or inf in log likelihood evaluation in single-parameter system");
+
+                    //fprintf(stderr, "ERROR: nan or inf from log likelihood function\n");
+                    //fprintf(stderr, "parameter: %f\n", x_t);
+                    //dump_cur_params(); 
                 }
                 unique_lock<mutex> lock(*ll_mutex);
                 ll_threads += y * w;
@@ -464,9 +508,18 @@ for prior. Second derivatives will not be calculated.\n");
                     this->params_int_cur_thread[thread_idx]);
 
                 if (isnan(yprime) || isinf(yprime)){
-                    fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_cur_params();
+                    
+                    vector<double> tmp{ x_t };
+                    throw optimML::math_error(0,
+                            false, true, false,
+                        param_double_cur,
+                        param_int_cur,
+                        tmp,
+                        "NaN or inf in first derivative in single-parameter system");
+
+                    //fprintf(stderr, "ERROR: nan or inf from derivative LL function\n");
+                    //fprintf(stderr, "parameter: %f\n", x_t);
+                    //dump_cur_params();
                 }
                 unique_lock<mutex> lock(*dll_mutex);
                 dll_threads += yprime * w * df_dt_x;
@@ -476,9 +529,17 @@ for prior. Second derivatives will not be calculated.\n");
                     this->params_int_cur_thread[thread_idx]);
 
                 if (isnan(yprime2) || isinf(yprime2)){
-                    fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
-                    fprintf(stderr, "parameter: %f\n", x_t);
-                    dump_cur_params();  
+                    vector<double> tmp{ x_t};
+                    throw optimML::math_error(0,
+                            false, true, false,
+                        param_double_cur,
+                        param_int_cur,
+                        tmp,
+                        "NaN or inf in second derivative in single-parameter system");
+
+                    //fprintf(stderr, "ERROR: nan or inf from 2nd derivative LL function\n");
+                    //fprintf(stderr, "parameter: %f\n", x_t);
+                    //dump_cur_params();  
                 }
                 unique_lock<mutex> lock(*d2ll_mutex);
                 d2ll_threads += yprime2 * w * d2f_dt2_x;

@@ -1196,10 +1196,15 @@ part of a param grp.\n");
             }
             if (isnan(ll) || isinf(ll)){
                 if (!silent){
-                    fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
+                    //fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
                 }
-                print_function_error(thread_idx);
-                throw optimML::OPTIMML_MATH_ERR;
+                //print_function_error(thread_idx);
+                //throw optimML::OPTIMML_MATH_ERR;
+                throw optimML::math_error(-1, false, false, false, 
+                    params_double_cur_thread[thread_idx],
+                    params_int_cur_thread[thread_idx],
+                    x_t_extern,
+                    "Log likelihood is NaN or inf");
             }
             if (ll_data_points){
                 data_ll[i] = ll;
@@ -1217,11 +1222,16 @@ part of a param grp.\n");
                         this->params_prior_double[j], this->params_prior_int[j]);
                     if (isnan(ll) || isinf(ll)){
                         if (!silent){
-                            fprintf(stderr, "ERROR: illegal value returned by prior log likelihood function on \
+                            //fprintf(stderr, "ERROR: illegal value returned by prior log likelihood function on \
     parameter %d\n", j);
                         }
-                        print_function_error_prior(j);
-                        throw optimML::OPTIMML_MATH_ERR;
+                        //print_function_error_prior(j);
+                        //throw optimML::OPTIMML_MATH_ERR;
+                        throw optimML::math_error(j, false, false, true,
+                            params_prior_double[j],
+                            params_prior_int[j],
+                            x_t_extern,
+                            "Log likelihood is NaN or inf after evaluating prior");
                     }
                     f_x += ll;
                 }
@@ -1371,10 +1381,15 @@ part of a param grp.\n");
                 }
                 if (err != -1){
                     if (!silent){
-                        fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", err);
+                        //fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", err);
                     }
-                    print_function_error(thread_idx);
-                    throw optimML::OPTIMML_MATH_ERR;
+                    //print_function_error(thread_idx);
+                    //throw optimML::OPTIMML_MATH_ERR;
+                    throw optimML::math_error(err, true, false, false,
+                        params_double_cur_thread[thread_idx],
+                        params_int_cur_thread[thread_idx],
+                        x_t_extern, 
+                        "Gradient function returned NaN or inf");
                 }
                 double w = 1.0;
                 if (this->weights.size() > 0){
@@ -1469,11 +1484,16 @@ part of a param grp.\n");
                             this->params_prior_int[j]);
                         if (isnan(dllprior) || isinf(dllprior)){
                             if (!silent){
-                                fprintf(stderr, "ERROR: illegal value returned by prior gradient function on \
+                                //fprintf(stderr, "ERROR: illegal value returned by prior gradient function on \
     parameter %d\n", j);
                             }
-                            print_function_error_prior(j); 
-                            throw optimML::OPTIMML_MATH_ERR;
+                            //print_function_error_prior(j); 
+                            //throw optimML::OPTIMML_MATH_ERR;
+                            throw optimML::math_error(j, true, false, true, 
+                                params_prior_double[j],
+                                params_prior_int[j],
+                                x_t_extern,
+                                "Gradient is NaN or inf after evaluating prior");
                         }
                         dy_dt_prior[j] = dllprior;
                         G[j] -= (dy_dt_prior[j] * dt_dx[j]); 
@@ -1551,11 +1571,16 @@ part of a param grp.\n");
                 for (int k = 0; k < n_param_extern; ++k){
                     if (isnan(d2y_dt2_extern[j][k]) || isinf(d2y_dt2_extern[j][k])){
                         if (!silent){
-                            fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function\n");
-                            fprintf(stderr, "parameters: %d %d\n", j, k);
+                            //fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function\n");
+                            //fprintf(stderr, "parameters: %d %d\n", j, k);
                         }
-                        print_function_error();
-                        throw optimML::OPTIMML_MATH_ERR;
+                        //print_function_error();
+                        //throw optimML::OPTIMML_MATH_ERR;
+                        throw optimML::math_error(j, false, true, false,
+                            param_double_cur,
+                            param_int_cur,
+                            x_t_extern,
+                            "NaN or inf in 2nd derivative (Hessian)");
                     }
                     
                     bool j_is_p = nmixcomp > 0 && j == n_param_extern-1;
@@ -1670,11 +1695,16 @@ part of a param grp.\n");
                         this->params_prior_int[j]) * dt_dx[j] * dt_dx[j] + dy_dt_prior[j] * d2t_dx2[j][j]; 
                     if (isnan(d2llprior) || isinf(d2llprior)){
                         if (!silent){
-                            fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function for prior \
+                            //fprintf(stderr, "ERROR: illegal value returned by 2nd derivative function for prior \
     on parameter %d\n", j);
                         }
-                        print_function_error_prior(j);
-                        throw optimML::OPTIMML_MATH_ERR;
+                        //print_function_error_prior(j);
+                        //throw optimML::OPTIMML_MATH_ERR;
+                        throw optimML::math_error(j, false, true, true,
+                            params_prior_double[j],
+                            params_prior_int[j],
+                            x_t_extern,
+                            "NaN or inf in 2nd derivative (Hessian) from prior evaluation");
                     }
                     H[j][j] += d2llprior;
                 }

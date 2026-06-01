@@ -56,7 +56,6 @@ namespace optimML{
      */
     const void multivar_ml_solver::eval_funcs_bfgs(const std::vector<double>& x_bfgs, 
         double& f_bfgs, std::vector<double>& g_bfgs){
-        
         if (g_bfgs.size() != n_param){
             g_bfgs.resize(n_param);
         }
@@ -243,7 +242,7 @@ namespace optimML{
         // at the end, independent of data
         loglik += eval_ll_x(-1);
         eval_dll_dx(-1);
-
+        
         // Make everything negative to reflect that we're minimizing instead of maximizing
         f_bfgs = -loglik;
         //for (int i = 0; i < n_param; ++i){
