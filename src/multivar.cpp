@@ -1200,11 +1200,17 @@ part of a param grp.\n");
                 }
                 //print_function_error(thread_idx);
                 //throw optimML::OPTIMML_MATH_ERR;
-                throw optimML::math_error(-1, false, false, false, 
-                    params_double_cur_thread[thread_idx],
-                    params_int_cur_thread[thread_idx],
-                    x_t_extern,
-                    "Log likelihood is NaN or inf");
+                if (thread_idx >= 0){
+                    throw optimML::math_error(-1, false, false, false, 
+                        params_double_cur_thread[thread_idx],
+                        params_int_cur_thread[thread_idx],
+                        x_t_extern,
+                        "Log likelihood is NaN or inf");
+                }
+                else{
+                    throw optimML::math_error(-1, false, false, false,
+                        param_double_cur, param_int_cur, x_t_extern, "Log likelihood is NaN or inf");
+                }
             }
             if (ll_data_points){
                 data_ll[i] = ll;
@@ -1385,11 +1391,18 @@ part of a param grp.\n");
                     }
                     //print_function_error(thread_idx);
                     //throw optimML::OPTIMML_MATH_ERR;
-                    throw optimML::math_error(err, true, false, false,
-                        params_double_cur_thread[thread_idx],
-                        params_int_cur_thread[thread_idx],
-                        x_t_extern, 
-                        "Gradient function returned NaN or inf");
+                    if (thread_idx >= 0){
+                        throw optimML::math_error(err, true, false, false,
+                            params_double_cur_thread[thread_idx],
+                            params_int_cur_thread[thread_idx],
+                            x_t_extern, 
+                            "Gradient function returned NaN or inf");
+                    }
+                    else{
+                        throw optimML::math_error(err, true, false, false,
+                            param_double_cur, param_int_cur, x_t_extern,
+                            "Gradient function returned NaN or inf");
+                    }
                 }
                 double w = 1.0;
                 if (this->weights.size() > 0){

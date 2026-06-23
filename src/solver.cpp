@@ -132,8 +132,13 @@ namespace optimML{
         }
         double mu = params_d.at("mu");
         double sigma = params_d.at("sigma");
-        return dnorm(x, mu, sigma) - log(phi((1.0-mu)/sigma) - phi((0.0-mu)/sigma));
-            
+        
+        if (trunc){
+            return dnorm(x, mu, sigma) - log(phi((1.0-mu)/sigma) - phi((0.0-mu)/sigma));
+        }
+        else{
+            return dnorm(x,mu,sigma);
+        }
     }
 
     double solver::dll_prior_normal(double x, const map<string, double>& params_d,
