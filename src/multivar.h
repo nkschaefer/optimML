@@ -108,6 +108,12 @@ namespace optimML{
             // How to we compute 2nd derivative of log likelihood of prior on each variable? (optional)
             std::vector<prior_func> d2ll_dx2_prior;
             
+            std::vector<multivar_func> multivar_priors;
+            std::vector<multivar_func_d> multivar_priors_d;
+            
+            std::map<std::string, double> multivar_prior_params_d;
+            std::map<std::string, int> multivar_prior_params_i;
+
             std::vector<ll_hook> ll_hooks;
             std::vector<std::vector<double> > ll_hooks_data_d;
             std::vector<std::vector<int> > ll_hooks_data_i;
@@ -289,7 +295,11 @@ namespace optimML{
             bool add_prior(int idx, prior_func ll, prior_func dll, 
                 prior_func dll2);
             bool add_prior(int idx, prior_func ll, prior_func dll);
- 
+            bool remove_prior(int idx);
+
+            bool add_multivar_prior(multivar_func ll, multivar_func_d dll);
+            bool remove_multivar_prior(int i);
+
             bool add_normal_prior(int idx, double mu, double sigma);
             bool add_normal_prior(int idx, double mu, double sigma, double a, double b);
             bool add_beta_prior(int idx, double alpha, double beta);
@@ -302,6 +312,12 @@ namespace optimML{
             
             bool set_prior_param(int idx, std::string name, double data);
             bool set_prior_param(int idx, std::string name, int data);
+            
+            bool add_multivar_prior_param(std::string name, double data);
+            bool add_multivar_prior_param(std::string name, int data);
+            
+            bool set_multivar_prior_param(std::string name, double data);
+            bool set_multivar_prior_param(std::string name, int data);
 
             void add_likelihood_hook(ll_hook fun, std::vector<double>& ddat,
                 std::vector<int>& idat);

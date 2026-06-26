@@ -28,6 +28,14 @@
 namespace optimML{
     
     // Exception class for math issues
+    
+    // param_idx stores the model parameter that caused the issue, or -1 if missing.
+    // ONE EXCEPTION: if this comes from a prior evaluation, the parameter index should
+    // be set to the parameter with the problematic prior.
+    // If it comes from a multivariate prior, though, it will be set to the negative
+    // of the multivariate prior index. Therefore, if it's from a prior and param_idx
+    // is negative, you can try removing the multivariate prior with -param_idx.
+
     class math_error: public std::exception{
         public:
             int param_idx;
