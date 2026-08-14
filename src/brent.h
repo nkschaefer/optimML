@@ -77,6 +77,8 @@ namespace optimML{
 
             double quadfit(bool& success);
             double quadfit2(bool& success);
+            
+            double back_transform(double x);
 
             bool golden();
             bool interpolate();
@@ -86,8 +88,8 @@ namespace optimML{
             bool no_deriv;
             bool root;
             
-            bool bracket_root(int attempt_no);
-            bool bracket_max(int attempt_no);
+            bool bracket_root(int max_attempts = 100, bool use_deriv = false);
+            bool bracket_max(int max_attempts = 100);
             
             // Override function evaluation to subtract RHS if we are root finding.
             double eval_ll_x(double x);

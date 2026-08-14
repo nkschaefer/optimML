@@ -32,6 +32,7 @@ optimML::brent_solver::brent_solver(univar_func ll){
     root = false;
     rhs = 0.0;
     reconcile_func_set = false;
+    root_found = false;
 }
 
 optimML::brent_solver::brent_solver(univar_func ll, univar_func dll){
@@ -42,6 +43,7 @@ optimML::brent_solver::brent_solver(univar_func ll, univar_func dll){
     root = false;
     rhs = 0.0;
     reconcile_func_set = false;
+    root_found = false;
 }
 
 optimML::brent_solver::brent_solver(univar_func ll, univar_func dll, univar_func dll2){
@@ -52,6 +54,7 @@ optimML::brent_solver::brent_solver(univar_func ll, univar_func dll, univar_func
     root = false;
     rhs = 0.0;
     reconcile_func_set = false;
+    root_found = false;
 }
 
 /**
@@ -61,18 +64,17 @@ optimML::brent_solver::brent_solver(univar_func ll, univar_func dll, univar_func
  *
  */
 bool optimML::brent_solver::golden(){
-    static double const1 = (3.0 - sqrt(5))/2.0;
-    static double const2 = (sqrt(5) - 1.0)/2.0;
-    
+    static double golden_ratio = (3.0 - sqrt(5))/2.0;
+
     double x;
-    if ( b < (a+c)/2.0){
-        x = a + const1*(c-a);
+    if (c - b > b - a){
+        x = b + golden_ratio*(c-b);
     }
     else{
-        x = a + const2*(c-a);
-    } 
-    
-    if (abs(x-b) < xval_precision){
+        x = b - golden_ratio*(b-a);
+    }
+
+    if (fabs(back_transform(x)-back_transform(b)) < xval_precision){
         b = (x+b)/2.0;
         return true;
     }
@@ -80,17 +82,18 @@ bool optimML::brent_solver::golden(){
         double f_x = eval_ll_x(x);
         
         step_2ago = step_prev;
+        step_prev = x-b;
 
         if (b < x){
             if (f_b > f_x){
                 // (a,b,x)
-                step_prev = c-x;
+                //step_prev = c-x;
                 c = x;
                 f_c = f_x;
             }
             else{
                 // (b,x,c)
-                step_prev = b-a;
+                //step_prev = b-a;
                 a = b;
                 f_a = f_b;
                 b = x;
@@ -100,13 +103,13 @@ bool optimML::brent_solver::golden(){
         else{
             if (f_b > f_x){
                 // (x,b,c)
-                step_prev = x-a;
+                //step_prev = x-a;
                 a = x;
                 f_a = f_x;
             }
             else{
                 // (a,x,b)
-                step_prev = c-b;
+                //step_prev = c-b;
                 c = b;
                 f_c = f_b;
                 b = x;
@@ -131,10 +134,20 @@ double optimML::brent_solver::quadfit(bool& success){
         success = false;
         return 0;
     }
-
+    
     double step = num / denom;
 
-    if (b + step > a && b + step < c){
+    // Make sure step is not too big (compare against last actual step; history is
+    // updated by the callers after a step is accepted, not here)
+    bool interp_pass = fabs(step) < 0.5*fabs(step_prev) && fabs(step) < 0.5*(c-a);
+    if (interp_pass){
+        // Make sure step is not too close to an endpoint.
+        double tol = xval_precision * (c-a);
+        if (b + step < a + tol || b + step > c - tol){
+            interp_pass = false;
+        }
+    }
+    if (interp_pass){
         success = true;
         return step;
     }
@@ -142,37 +155,6 @@ double optimML::brent_solver::quadfit(bool& success){
         success = false;
         return 0;
     }
-
-
-
-
-
-
-
-
-    /*
-    double x = f_b/f_c;
-    double y = f_b/f_a;
-    double z = f_a/f_c;
-    double num = y*(z*(x-z)*(c-b) - (1.0-x)*(b-a));
-    double denom = (z-1.0)*(x-1.0)*(y-1.0);
-    
-    if (denom == 0){
-        success = false;
-        return 0;
-    }
-    else{
-        double new_b = b - num/denom;
-        if (new_b > a && new_b < c){
-            success = true;
-            return -num/denom;
-        }
-        else{
-            success = false;
-            return 0;
-        }
-    }
-    */
 }
 
 /**
@@ -218,19 +200,26 @@ double optimML::brent_solver::quadfit2(bool& success){
  * golden section search.
  */
 bool optimML::brent_solver::interpolate_root(){
-    if (f_b == 0 || c-a < 2.0 * xval_precision){
+    if (fabs(f_b) < xval_precision * xval_precision ||
+        back_transform(c)-back_transform(a) < 2.0 * xval_precision){
         return true;
     }
-    
-    /*if (b - a < xval_precision){
-        return true;
-    }
-    */
+
     bool interp_success;
     double step = quadfit2(interp_success);
-    if (interp_success){
+
+    // Brent safeguard: accept interpolation only if the step is shrinking
+    // relative to two iterations ago.  Without this, interpolation can
+    // oscillate between bracket endpoints without converging.
+    if (interp_success &&
+        (step_2ago == 0.0 || fabs(step) < 0.5 * fabs(step_2ago))){
+
         double x = b + step;
         double f_x = eval_ll_x(x);
+
+        step_2ago = step_prev;
+        step_prev = step;
+
         if (x < b){
             if (f_x * f_a < 0){
                 c = b;
@@ -258,6 +247,8 @@ bool optimML::brent_solver::interpolate_root(){
     }
     else{
         // Use bisection.
+        step_2ago = step_prev;
+
         if (f_a < 0){
             if (f_b < 0){
                 a = b;
@@ -269,7 +260,6 @@ bool optimML::brent_solver::interpolate_root(){
             }
         }
         else{
-            // c < 0
             if (f_b < 0){
                 c = b;
                 f_c = f_b;
@@ -280,17 +270,13 @@ bool optimML::brent_solver::interpolate_root(){
             }
         }
         step = (a+c)/2.0 - b;
+        step_prev = step;
         b += step;
         f_b = eval_ll_x(b);
     }
-    if (c - a < 2.0 * xval_precision){
+    if (back_transform(c) - back_transform(a) < 2.0 * xval_precision){
         return true;
     }
-    /*
-    if (abs(step) < xval_precision){
-        return true;
-    }
-    */
     return false;
 }
 
@@ -299,59 +285,42 @@ bool optimML::brent_solver::interpolate_root(){
  * information, which uses golden section search as a fallback.
  */
 bool optimML::brent_solver::interpolate(){
-    if (c - a < 2.0 * xval_precision){
+    if (back_transform(c) - back_transform(a) < 2.0 * xval_precision){
         return true;
     }
     bool interp_success;
     double step = quadfit(interp_success);
-    if (interp_success && (step_2ago == 0.0 || abs(step) < 0.5*step_2ago)){
+    if (interp_success && (step_2ago == 0.0 || fabs(step) < 0.5*fabs(step_2ago))){
         double x = step + b;
-        if (c - a < 2.0 * xval_precision){
-            return true;
-        }
-        /*
-        if (abs(x-b) < xval_precision){
-            b = (x + b)/2.0;
-            return true;
-        }
-        */
-        else{
-            double f_x = eval_ll_x(x);
-            step_2ago = step_prev;
-            if (x < b){
-                if (f_b > f_x){
-                    // (x,b,c)
-                    step_prev = x-a;
-                    a = x;
-                    f_a = f_x;
-                }
-                else{
-                    // (a,x,b)
-                    step_prev = c-b;
-                    c = b;
-                    f_c = f_b;
-                    b = x;
-                    f_b = f_x;
-                }
+        double f_x = eval_ll_x(x);
+        step_2ago = step_prev;
+        step_prev = x-b;
+
+        if (x < b){
+            if (f_b > f_x){
+                a = x;
+                f_a = f_x;
             }
             else{
-                if (f_b > f_x){
-                    // (a,b,x)
-                    step_prev = c-x;
-                    c = x;
-                    f_c = f_x;
-                }
-                else{
-                    // (b,x,c)
-                    step_prev = b-a;
-                    a = b;
-                    f_a = f_b;
-                    b = x;
-                    f_b = f_x;
-                }
+                c = b;
+                f_c = f_b;
+                b = x;
+                f_b = f_x;
             }
-            return false;
         }
+        else{
+            if (f_b > f_x){
+                c = x;
+                f_c = f_x;
+            }
+            else{
+                a = b;
+                f_a = f_b;
+                b = x;
+                f_b = f_x;
+            }
+        }
+        return false;
     }
     else{
         // Conditions not met. Fall back to golden section search.
@@ -367,64 +336,44 @@ bool optimML::brent_solver::interpolate(){
  * One iteration of Brent's method for maximization using first derivative information
  */
 bool optimML::brent_solver::interpolate_der(){
-    if (c - a < 2.0 * xval_precision){
+    if (back_transform(c) - back_transform(a) < 2.0 * xval_precision){
         return true;
     }
-    /*
-    if (b - a < xval_precision){
-        return true;
-    }
-    */
 
     bool interp_success;
-    
     double step = quadfit(interp_success);
     
-    if (interp_success && (step_2ago == 0.0 || abs(step) < 0.5*step_2ago)){
+    if (interp_success && (step_2ago == 0.0 || fabs(step) < 0.5*fabs(step_2ago))){
         double x = step + b;
         double f_x = eval_ll_x(x);
-        //if (abs(x-b) < xval_precision){
-        if (c - a < 2.0 * xval_precision){
-            b = (x + b)/2.0;
-            return true;
-        }
-        else{
-            step_2ago = step_prev;
-            
-            if (x < b){
-                if (f_b > f_x){
-                    // (x,b,c)
-                    step_prev = x-a;
-                    a = x;
-                    f_a = f_x;
-                }
-                else{
-                    // (a,x,b)
-                    step_prev = c-b;
-                    c = b;
-                    f_c = f_b;
-                    b = x;
-                    f_b = f_x;
-                }
+        step_2ago = step_prev;
+        step_prev = x-b;
+
+        if (x < b){
+            if (f_b > f_x){
+                a = x;
+                f_a = f_x;
             }
             else{
-                if (f_b > f_x){
-                    // (a,b,x)
-                    step_prev = c-x;
-                    c = x;
-                    f_c = f_x;
-                }
-                else{
-                    // (b,x,c)
-                    step_prev = b-a;
-                    a = b;
-                    f_a = f_b;
-                    b = x;
-                    f_b = f_x;
-                }
+                c = b;
+                f_c = f_b;
+                b = x;
+                f_b = f_x;
             }
-            return false;
         }
+        else{
+            if (f_b > f_x){
+                c = x;
+                f_c = f_x;
+            }
+            else{
+                a = b;
+                f_a = f_b;
+                b = x;
+                f_b = f_x;
+            }
+        }
+        return false;
     }
     else{
         // Conditions not met. Compute derivative and use it to guide which of the two
@@ -435,8 +384,8 @@ bool optimML::brent_solver::interpolate_der(){
         if (df_db < 0){
             // Interval (a,b)
             // (a,x,b)
-            step_prev = c-b;
             double x = (a+b)/2.0;
+            step_prev = x-b;
             double f_x = eval_ll_x(x);
             c = b;
             b = x;
@@ -446,8 +395,8 @@ bool optimML::brent_solver::interpolate_der(){
         else{
             // Interval (b,c)
             // (b,x,c)
-            step_prev = b-a;
             double x = (b+c)/2.0;
+            step_prev = x-b;
             double f_x = eval_ll_x(x);
             a = b;
             b = x;
@@ -522,101 +471,85 @@ void optimML::brent_solver::set_max(){
  * If we've tried solving (given initial bounds), and the interval
  * does not bracket a maximum, attempt to find a new interval that
  * does.
+ *
+ * Uses golden-ratio expansion (Numerical Recipes mnbrak, adapted for
+ * maximization). Walks away from the worse endpoint; the step grows
+ * by a factor of ~1.618 each iteration, so coverage is geometric.
  */
-bool optimML::brent_solver::bracket_max(int attempt_no){
-    
-    if (attempt_no > 10){
-        return false;
+bool optimML::brent_solver::bracket_max(int max_attempts){
+
+    static const double GOLD = 1.618034;
+    static const double TLIMIT = 500.0;
+
+    for (int attempt = 0; attempt < max_attempts; ++attempt){
+
+        if (f_b > f_a && f_b > f_c){
+            return true;
+        }
+
+        if (f_c >= f_a){
+            // Function is higher at the right end — expand right.
+            double step = GOLD * (c - b);
+            if (step > TLIMIT) step = TLIMIT;
+
+            a = b;  f_a = f_b;
+            b = c;  f_b = f_c;
+            c = c + step;
+            f_c = eval_ll_x(c);
+        }
+        else{
+            // Function is higher at the left end — expand left.
+            double step = GOLD * (b - a);
+            if (step > TLIMIT) step = TLIMIT;
+
+            c = b;  f_c = f_b;
+            b = a;  f_b = f_a;
+            a = a - step;
+            f_a = eval_ll_x(a);
+        }
     }
 
-    // Define a step size
-    double stepsize = (b-a);
-    if (c-b < stepsize){
-        stepsize = c-b;
-    }
-    // Make the next step 2x as big
-    stepsize *= 2.0;
-    
-    if (f_c > f_a){
-        // Move to the right.
-        a = b;
-        f_a = f_b;
-        b = c;
-        f_b = f_c;
-        c = c + stepsize;
-        f_c = eval_ll_x(c);
-        if (f_b > f_a && f_b > f_c){
-            return true;
-        }
-        else{
-            // Try again
-            return bracket_max(attempt_no+1);
-        }
-    }
-    else{
-        // Move to the left.
-        c = b;
-        f_c = f_b;
-        b = a;
-        f_b = f_a;
-        a = a - stepsize;
-        f_a = eval_ll_x(a);
-        if (f_b > f_a && f_b > f_c){
-            return true;
-        }
-        else{
-            return bracket_max(attempt_no+1);
-        }
-    }
+    return (f_b > f_a && f_b > f_c);
 }
 
 /**
  * If we've tried solving (given initial bounds), and the interval
  * does not bracket a root, attempt to find a new interval that does.
  */
-bool optimML::brent_solver::bracket_root(int attempt_no){
-    if (attempt_no > 10){
-        return false;
+bool optimML::brent_solver::bracket_root(int max_attempts, bool use_deriv){
+
+    static const double GOLD = 1.618034;
+    static const double TLIMIT = 500.0;
+
+    for (int attempt = 0; attempt < max_attempts; ++attempt){
+
+        if (f_a * f_c < 0){
+            return true;
+        }
+
+        if (fabs(f_c) < fabs(f_a)){
+            // f_c is closer to zero — expand right.
+            double step = GOLD * (c - b);
+            if (step > TLIMIT) step = TLIMIT;
+
+            a = b;  f_a = f_b;
+            b = c;  f_b = f_c;
+            c = c + step;
+            f_c = use_deriv ? eval_dll_dx(c) : eval_ll_x(c);
+        }
+        else{
+            // f_a is closer to zero — expand left.
+            double step = GOLD * (b - a);
+            if (step > TLIMIT) step = TLIMIT;
+
+            c = b;  f_c = f_b;
+            b = a;  f_b = f_a;
+            a = a - step;
+            f_a = use_deriv ? eval_dll_dx(a) : eval_ll_x(a);
+        }
     }
 
-    // Define a step size
-    double stepsize = (b-a);
-    if (c-b < stepsize){
-        stepsize = c-b;
-    }
-    // Make the next step 2x as big
-    stepsize *= 2.0;
-    
-    if (abs(f_c) < abs(f_a)){
-        // Look right
-        a = b;
-        f_a = f_b;
-        b = c;
-        f_b = f_c;
-        c += stepsize;
-        f_c = eval_ll_x(c);
-        if (f_a * f_c < 0){
-            return true;
-        }
-        else{
-            return bracket_root(attempt_no+1);
-        }
-    }
-    else{
-        // Look left
-        c = b;
-        f_c = f_b;
-        b = a;
-        f_b = f_a;
-        a -= stepsize;
-        f_a = eval_ll_x(a);
-        if (f_a * f_c < 0){
-            return true;
-        }
-        else{
-            return bracket_root(attempt_no+1);
-        }
-    }
+    return (f_a * f_c < 0);
 }
 
 /**
@@ -632,7 +565,7 @@ double optimML::brent_solver::eval_ll_x(double x){
     if (this->root){
         // Check for additional stuff to do.
         if (this->additional_funcs.size() > 0){
-            
+
             if (!this->reconcile_func_set){
                 fprintf(stderr, "ERROR: multiple functions set for root finding, but\
  no function provided to reconcile their output. Please call set_root_reconcile_function()\
@@ -642,7 +575,7 @@ double optimML::brent_solver::eval_ll_x(double x){
 
             univar_func backup = ll_x;
             additional_funcs_out[0] = result;
-            
+
             for (int i = 0; i < additional_funcs.size(); ++i){
                 ll_x = additional_funcs[i];
                 double val = univar::eval_ll_x(x);
@@ -656,14 +589,29 @@ double optimML::brent_solver::eval_ll_x(double x){
             // the independent variable, and a vector of output from each function
             // evaluated at the variable value.
             result = this->reconcile_func(x_t, additional_funcs_out);
-
-            // Since we're root finding, subtract rhs
-            result -= rhs;
-
         }
+
+        // Subtract rhs (find root of f(x) - rhs = 0)
+        result -= rhs;
     }
 
     return result;
+}
+
+double optimML::brent_solver::back_transform(double x_t){
+    double result = x_t;
+    if (trans_log){
+        result = exp(x_t);
+    }
+    else if (trans_logit || trans_bounds){
+        result = expit(x_t);
+        if (trans_bounds){
+            result *= (bound_high - bound_low);
+            result += bound_low;
+        }
+    }
+    return result;
+
 }
 
 /**
@@ -718,62 +666,63 @@ transformation of the data.\n", lower, upper);
     
     // Initial bounds (a & c) and guess of maximum (b)
     a = lower;
-    b = (lower+upper)/2.0;
+    //b = (lower+upper)/2.0;
     c = upper;
     
     if (this->trans_log){
         // each variable is log(x), operate on e(x)
         a = log(lower);
         c = log(upper);
-        b = log(b);
+        //b = log(b);
+        b = (a + c)/2.0;
     }
     else if (this->trans_logit){
         // Each variable is logit(x), operate on expit(x)
         a = logit(lower);
         c = logit(upper);
-        b = logit(b);
+        //b = logit(b);
+        b = (a + c)/2.0;
     }
     else if (this->trans_bounds){
         // Transform variables
         a = log(lower-bound_low) - log(bound_high-lower);
         c = log(upper-bound_low) - log(bound_high-upper);
-        b = log(b-bound_low) - log(bound_high-b);
+        //b = log(b-bound_low) - log(bound_high-b);
+        b = (a + c)/2.0;
         /*
         a = bound_low + (bound_high-bound_low)/(1.0 + exp(-a));
         b = bound_low + (bound_high-bound_low)/(1.0 + exp(-b));
         c = bound_low + (bound_high-bound_low)/(1.0 + exp(-c));
         */
     }
-    
-    double delta = 999;
-    int nits = 0;
-    
-    double df_dt_a = 1.0;
-    double df_dt_b = 1.0;
-    double df_dt_c = 1.0;
+    else{
+        b = (a+c)/2.0;
+    }
 
-    if (this->trans_log){
-        // f(x) = e^x -> df_dx = e^x
-        df_dt_a = exp(a);
-        df_dt_b = exp(b);
-        df_dt_c = exp(c);
+    // Sample several interior points to find a good initial b.
+    // The transformed-space midpoint (a+c)/2 maps to the geometric mean
+    // in original space, which can be extremely far from any reasonable
+    // optimum (e.g. 0.1 for the range (0, 1e6) with log transform).
+    // Evaluating at a handful of evenly-spaced points and picking the
+    // best one as b makes the bracket check succeed without expansion
+    // in most cases, and makes results independent of the starting
+    // interval.
+    if (!root && this->n_data > 0){
+        int n_samples = 10;
+        double best_f = -1e300;
+        double best_t = b;
+        for (int i = 1; i <= n_samples; ++i){
+            double t = a + i * (c - a) / (n_samples + 1);
+            double ft = eval_ll_x(t);
+            if (ft > best_f){
+                best_f = ft;
+                best_t = t;
+            }
+        }
+        b = best_t;
     }
-    else if (this->trans_logit || this->trans_bounds){
-        // f(x) = 1/(1 + e^(-x)) -> df_dx = exp(-x) / ((exp(-x)) + 1)^2
-        df_dt_a = exp(-a) / pow(((exp(-a)) + 1), 2);
-        df_dt_b = exp(-b) / pow(((exp(-b)) + 1), 2);
-        df_dt_c = exp(-c) / pow(((exp(-c)) + 1), 2);
-    }
-    if (this->trans_bounds){
-        df_dt_a *= (bound_high-bound_low);
-        df_dt_b *= (bound_high-bound_low);
-        df_dt_c *= (bound_high-bound_low);
-        /*
-        df_dt_a = 1.0/(a-bound_low) + 1.0/(bound_high-a);
-        df_dt_b = 1.0/(b-bound_low) + 1.0/(bound_high-b);
-        df_dt_c = 1.0/(c-bound_low) + 1.0/(bound_high-c);
-        */
-    }
+
+    int nits = 0;
 
     if (root || !no_deriv){
         if (root){
@@ -794,10 +743,10 @@ transformation of the data.\n", lower, upper);
         if (!root_in_interval){
             if (attempt_bracket){
                 if (root){
-                    root_in_interval = bracket_root(0);
+                    root_in_interval = bracket_root();
                 }
                 else{
-                    root_in_interval = bracket_max(0);
+                    root_in_interval = bracket_root(100, true);
                 }
             }
         }
@@ -861,62 +810,57 @@ transformation of the data.\n", lower, upper);
         }
     }
 
-    if (!root){ 
+    if (!root){
         // If root, we already calculated these earlier.
         f_a = eval_ll_x(a);
         f_b = eval_ll_x(b);
         f_c = eval_ll_x(c);
-        
-        if (no_deriv){
-            // If here, we have not yet checked to make sure a maximum exists.
-            if (!(f_b > f_a && f_b > f_c)){
-                // Need to bracket.
-                bool bracket_found = false;
-                if (attempt_bracket){
-                    bracket_found = bracket_max(0);
+
+        if (!(f_b > f_a && f_b > f_c)){
+            // Need to bracket.
+            bool bracket_found = false;
+            if (attempt_bracket){
+                bracket_found = bracket_max();
+            }
+            if (!bracket_found){
+                // Bail.
+
+                this->root_found = false;
+                this->se_found = false;
+                this->se = 0.0;
+
+                // No root. Indicate failure and return whichever boundary
+                // is better.
+
+                double ll_a = eval_ll_x(a);
+                double ll_c = eval_ll_x(c);
+
+                double a_t = a;
+                double c_t = c;
+
+                if (this->trans_log){
+                    a_t = exp(a);
+                    c_t = exp(c);
                 }
-                if (!bracket_found){
-                    // Bail.
-         
-                    this->root_found = false;
-                    this->se_found = false;
-                    this->se = 0.0;
+                else if (this->trans_logit || this->trans_bounds){
+                    a_t = expit(a);
+                    c_t = expit(c);
+                }
+                if (this->trans_bounds){
+                    a_t *= (bound_high-bound_low);
+                    a_t += bound_low;
+                    c_t *= (bound_high-bound_low);
+                    c_t += bound_low;
+                }
 
-                    // No root. Indicate failure and return whichever boundary
-                    // is better.
-
-                    double ll_a = eval_ll_x(a);
-                    double ll_c = eval_ll_x(c);
-                    
-                    double a_t = a;
-                    double c_t = c;
-                
-                    if (this->trans_log){
-                        a_t = exp(a);
-                        c_t = exp(c);
-                    }
-                    else if (this->trans_logit || this->trans_bounds){
-                        a_t = expit(a);
-                        c_t = expit(c);
-                    }
-                    if (this->trans_bounds){
-                        a_t *= (bound_high-bound_low);
-                        a_t += bound_low;
-                        c_t *= (bound_high-bound_low);
-                        c_t += bound_low;
-                        //a_t = log(a - bound_low) - log(bound_high - a);
-                        //c_t = log(c - bound_low) - log(bound_high - c);
-                    }
-                
-                    // Choose higher function eval (looking for maximum)
-                    if (ll_a > ll_c){
-                        this->log_likelihood = ll_a;
-                        return a_t;
-                    }
-                    else{
-                        this->log_likelihood = ll_c;
-                        return c_t;
-                    }
+                // Choose higher function eval (looking for maximum)
+                if (ll_a > ll_c){
+                    this->log_likelihood = ll_a;
+                    return a_t;
+                }
+                else{
+                    this->log_likelihood = ll_c;
+                    return c_t;
                 }
             }
         }
@@ -961,10 +905,13 @@ transformation of the data.\n", lower, upper);
     }
 
     if (this->has_d2ll_dx2){
-        
-        // Try to get standard error here
+
+        // Try to get standard error here.
+        // NOTE: eval_d2ll_dx2 applies the chain rule, so y is d2LL/dt2 in the
+        // transformed space. The resulting se is therefore SE(t), e.g. SE(log x)
+        // when constrain_pos() is used. To obtain SE(x), multiply se by exp(b).
         double y = eval_d2ll_dx2(b);
-        
+
         if (y < 0.0){
             double se = sqrt(-1.0/y);
             this->se = se;
