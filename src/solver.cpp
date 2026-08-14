@@ -456,11 +456,16 @@ namespace optimML{
                 break;
             }
         }
-        if (idx == -1){
+        if (idx != -1){
             fprintf(stderr, "ERROR: cannot replace multi-value data with fixed value data.\n");
             return false;
         }
         this->param_double_cur[name] = dat;
+        if (threads_init){
+            for (int i = 0; i < nthread; ++i){
+                params_double_cur_thread[i][name] = dat;
+            }
+        }
         return true;
     }
 
@@ -470,7 +475,7 @@ namespace optimML{
             exit(1);
         }
         if (param_int_cur.count(name) > 0){
-            fprintf(stderr, "ERROR: already has data keyeed to %s\n", name.c_str());
+            fprintf(stderr, "ERROR: already has data keyed to %s\n", name.c_str());
             return false;
         }
         param_int_cur.insert(make_pair(name, dat));
@@ -499,11 +504,16 @@ namespace optimML{
                 break;
             }
         }
-        if (idx == -1){
+        if (idx != -1){
             fprintf(stderr, "ERROR: cannot replace multi-value data with fixed value data.\n");
             return false;
         }
         this->param_int_cur[name] = dat;
+        if (threads_init){
+            for (int i = 0; i < nthread; ++i){
+                params_int_cur_thread[i][name] = dat;
+            }
+        }
         return true;
     }
     /**

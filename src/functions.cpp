@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <utility>
 #include <math.h>
+#include "stlbfgs/stlbfgs.h"
 #include "functions.h"
 
 using std::cout;
@@ -63,4 +64,21 @@ double poisll(double x, double l){
     }
     double xfac = x*log(x) - x;
     return x * log(l) + -((float)l) - xfac;
+}
+
+/**
+ * Lightweight wrapper for L-BFGS solver
+ * ARGS: parameters (will be modified with results), function
+ *      function params: parameters, log likelihood, gradient
+ * REMEMBER: BFGS minimizes, so if maximizing (e.g. log likelihood),
+ *   make gradient & LL negative
+ */
+void bfgs(vector<double>& params,
+    function<void(const vector<double>&, double&, vector<double>&)> func){
+
+    STLBFGS::Optimizer opt{func, 1, 10};
+    opt.verbose = false;
+    opt.ftol = 1e-6;
+    opt.maxiter = 100;
+    double res = opt.run(params);
 }

@@ -57,7 +57,8 @@ namespace optimML{
         nthread = 0;    
         initialized = false;
         threads_init = false;
-        
+        n_multivar_priors = 0;
+
         //ll_mutex = NULL;
     }
     
@@ -152,6 +153,13 @@ namespace optimML{
         this->results = m.results;
         this->results_mixcomp = m.results_mixcomp;
         this->se = m.se;
+        
+        this->n_multivar_priors = m.n_multivar_priors;
+        this->multivar_priors = m.multivar_priors;
+        this->multivar_priors_d = m.multivar_priors_d;
+        this->multivar_prior_params_d = m.multivar_prior_params_d;
+        this->multivar_prior_params_i = m.multivar_prior_params_i;
+        this->multivar_prior_param_idx = m.multivar_prior_param_idx;
     }
 
     multivar::~multivar(){
@@ -363,27 +371,64 @@ part of a param grp.\n");
     bool multivar::add_multivar_prior(multivar_func f, multivar_func_d fd){
         multivar_priors.push_back(f);
         multivar_priors_d.push_back(fd);  
+        map<string, double> d;
+        map<string, int> i;
+        multivar_prior_params_d.push_back(d);
+        multivar_prior_params_i.push_back(i);
+        vector<int> v;
+        multivar_prior_param_idx.push_back(v);
+        n_multivar_priors++;
         return true;
     }
     
+    bool multivar::add_multivar_prior(std::vector<int>& inds, multivar_func f, multivar_func_d fd){
+        for (int x = 0; x < inds.size(); ++x){
+            if (inds[x] > x_t_extern.size()-1){
+                fprintf(stderr, "ERROR: invalid param index %d (total: %ld)\n", inds[x],
+                    x_t_extern.size());
+                return false;
+            }
+        }
+
+        multivar_priors.push_back(f);
+        multivar_priors_d.push_back(fd);  
+        map<string, double> d;
+        map<string, int> i;
+        multivar_prior_params_d.push_back(d);
+        multivar_prior_params_i.push_back(i);
+        multivar_prior_param_idx.push_back(inds);
+        n_multivar_priors++;
+        return true;
+    }
+
     bool multivar::remove_multivar_prior(int ix){
-        if (ix > multivar_priors.size()-1){
+        if (ix > n_multivar_priors-1){
             fprintf(stderr, "ERROR: no such multivariate prior exists\n");
             return false;
         }
         int i = 0;
         vector<multivar_func>::iterator p = multivar_priors.begin();
         vector<multivar_func_d>::iterator pd = multivar_priors_d.begin();
+        vector<map<string, double> >::iterator dd = multivar_prior_params_d.begin();
+        vector<map<string, int> >::iterator di = multivar_prior_params_i.begin();
+        vector<vector<int> >::iterator pi = multivar_prior_param_idx.begin();
+
         while (p != multivar_priors.end()){
             if (i == ix){
                 p = multivar_priors.erase(p);
                 pd = multivar_priors_d.erase(pd);
+                dd = multivar_prior_params_d.erase(dd);
+                di = multivar_prior_params_i.erase(di);
+                pi = multivar_prior_param_idx.erase(pi);
                 break;
             }
             else{
                 p++;
                 pd++;
                 i++;
+                dd++;
+                di++;
+                pi++;
             }
         }
         return true;
@@ -446,11 +491,12 @@ part of a param grp.\n");
             fprintf(stderr, "ERROR: not initialized\n");
             exit(1);
         }
-        if (multivar_prior_params_d.count(name) > 0){
+        int ix = n_multivar_priors-1;
+        if (multivar_prior_params_d[ix].count(name) > 0){
             fprintf(stderr, "ERROR: param %s already exists.\n", name.c_str());
             return false;
         }
-        multivar_prior_params_d.insert(make_pair(name, data));
+        multivar_prior_params_d[ix].insert(make_pair(name, data));
         return true;
     }
 
@@ -459,11 +505,12 @@ part of a param grp.\n");
             fprintf(stderr, "ERROR: not initialized\n");
             exit(1);
         }
-        if (multivar_prior_params_d.count(name) == 0){
+        int ix = n_multivar_priors-1;
+        if (multivar_prior_params_d[ix].count(name) == 0){
             fprintf(stderr, "ERROR: param %s does not exist.\n", name.c_str());
             return false;
         }
-        multivar_prior_params_d[name] = data;
+        multivar_prior_params_d[ix][name] = data;
         return true;
     }
 
@@ -472,11 +519,12 @@ part of a param grp.\n");
             fprintf(stderr, "ERROR: not initialized\n");
             exit(1);
         }
-        if (multivar_prior_params_i.count(name) > 0){
+        int ix = n_multivar_priors-1;
+        if (multivar_prior_params_i[ix].count(name) > 0){
             fprintf(stderr, "ERROR: param %s already exists.\n", name.c_str());
             return false;
         }
-        multivar_prior_params_i.insert(make_pair(name, data));
+        multivar_prior_params_i[ix].insert(make_pair(name, data));
         return true;
     }
 
@@ -485,14 +533,83 @@ part of a param grp.\n");
             fprintf(stderr, "ERROR: not initialized.\n");
             exit(1);
         }
-        if (multivar_prior_params_i.count(name) == 0){
+        int ix = n_multivar_priors-1;
+        if (multivar_prior_params_i[ix].count(name) == 0){
             fprintf(stderr, "ERROR: param %s does not exist.\n", name.c_str());
             return false;
         }
-        multivar_prior_params_i[name] = data;
+        multivar_prior_params_i[ix][name] = data;
+        return true;
+    }
+    
+    bool multivar::add_multivar_prior_param(string name, int ix, double data){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (ix > n_multivar_priors-1){
+            fprintf(stderr, "ERROR: invalid multivar prior idx\n");
+            return false;
+        }
+        if (multivar_prior_params_d[ix].count(name) > 0){
+            fprintf(stderr, "ERROR: param %s already exists.\n", name.c_str());
+            return false;
+        }
+        multivar_prior_params_d[ix].insert(make_pair(name, data));
         return true;
     }
 
+    bool multivar::set_multivar_prior_param(string name, int ix, double data){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (ix > n_multivar_priors-1){
+            fprintf(stderr, "ERROR: invalid multivar prior idx\n");
+            return false;
+        }
+        if (multivar_prior_params_d[ix].count(name) == 0){
+            fprintf(stderr, "ERROR: param %s does not exist.\n", name.c_str());
+            return false;
+        }
+        multivar_prior_params_d[ix][name] = data;
+        return true;
+    }
+
+    bool multivar::add_multivar_prior_param(string name, int ix, int data){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized\n");
+            exit(1);
+        }
+        if (ix > n_multivar_priors-1){
+            fprintf(stderr, "ERROR: invalid multivar prior idx\n");
+            return false;
+        }
+        if (multivar_prior_params_i[ix].count(name) > 0){
+            fprintf(stderr, "ERROR: param %s already exists.\n", name.c_str());
+            return false;
+        }
+        multivar_prior_params_i[ix].insert(make_pair(name, data));
+        return true;
+    }
+
+    bool multivar::set_multivar_prior_param(string name, int ix, int data){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized.\n");
+            exit(1);
+        }
+        if (ix > n_multivar_priors-1){
+            fprintf(stderr, "ERROR: invalid multivar prior idx\n");
+            return false;
+        }
+        if (multivar_prior_params_i[ix].count(name) == 0){
+            fprintf(stderr, "ERROR: param %s does not exist.\n", name.c_str());
+            return false;
+        }
+        multivar_prior_params_i[ix][name] = data;
+        return true;
+    }
+    
     void multivar::add_likelihood_hook(ll_hook fun, vector<double>& data_d,
         vector<int>& data_i){
         this->ll_hooks.push_back(fun);
@@ -1349,12 +1466,26 @@ part of a param grp.\n");
             }
             
             // Let multi-variate priors act
-            for (int j = 0; j < multivar_priors.size(); ++j){
-                double priorcontrib = multivar_priors[j](x_t_extern, multivar_prior_params_d, multivar_prior_params_i);
+            for (int j = 0; j < n_multivar_priors; ++j){
+                double priorcontrib;
+                if (multivar_prior_param_idx[j].size() == 0){
+                    priorcontrib = multivar_priors[j](x_t_extern, 
+                        multivar_prior_params_d[j], multivar_prior_params_i[j]);
+                }
+                else{
+                    vector<double> x_t_tmp;
+                    x_t_tmp.reserve(multivar_prior_param_idx[j].size());
+                    for (vector<int>::iterator tmp = multivar_prior_param_idx[j].begin(); 
+                        tmp != multivar_prior_param_idx[j].end(); ++tmp){
+                        x_t_tmp.push_back(*tmp);
+                    }
+                    priorcontrib = multivar_priors[j](x_t_tmp, 
+                        multivar_prior_params_d[j], multivar_prior_params_i[j]);
+                }
                 if (isnan(priorcontrib) || isinf(priorcontrib)){
                     throw optimML::math_error(-j, false, false, true, 
-                        multivar_prior_params_d,
-                        multivar_prior_params_i,
+                        multivar_prior_params_d[j],
+                        multivar_prior_params_i[j],
                         x_t_extern,
                         "Log likelihood is NaN or inf after evaluating multivariate prior");
                 }
@@ -1664,16 +1795,33 @@ part of a param grp.\n");
             }
             
             // Let multi-variate priors act
-            if (multivar_priors.size() > 0){
+            if (n_multivar_priors > 0){
                 vector<double> prior_grad(x_t_extern.size(), 0.0);
-                for (int j = 0; j < multivar_priors.size(); ++j){
-                    multivar_priors_d[j](x_t_extern, multivar_prior_params_d, 
-                        multivar_prior_params_i, prior_grad);
+                for (int j = 0; j < n_multivar_priors; ++j){
+                    if (multivar_prior_param_idx[j].size() == 0){
+                        multivar_priors_d[j](x_t_extern, 
+                            multivar_prior_params_d[j], 
+                            multivar_prior_params_i[j], 
+                            prior_grad);
+                    }
+                    else{
+                        vector<double> x_t_tmp;
+                        x_t_tmp.reserve(multivar_prior_param_idx[j].size());
+                        for (vector<int>::iterator tmp = multivar_prior_param_idx[j].begin(); 
+                            tmp != multivar_prior_param_idx[j].end(); ++tmp){
+                            x_t_tmp.push_back(*tmp);
+                        }
+                        multivar_priors_d[j](x_t_tmp,
+                            multivar_prior_params_d[j],
+                            multivar_prior_params_i[j],
+                            prior_grad);
+                    }
+                    
                     for (int z = 0; z < prior_grad.size(); ++z){
                         if (isinf(prior_grad[z]) || isnan(prior_grad[z])){
                             throw optimML::math_error(-z, true, false, true, 
-                                multivar_prior_params_d,
-                                multivar_prior_params_i,
+                                multivar_prior_params_d[j],
+                                multivar_prior_params_i[j],
                                 x_t_extern,
                                 "Gradient is NaN or inf after evaluating multivariate prior");
                         }

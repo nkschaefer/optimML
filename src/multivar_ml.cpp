@@ -34,6 +34,7 @@ namespace optimML{
     multivar_ml_solver::multivar_ml_solver(){
         // Parent constructor should handle everything important
         nthread_bfgs = 1;
+        delta_thresh = 1e-8;
     }
 
     multivar_ml_solver::multivar_ml_solver(vector<double> params_init,

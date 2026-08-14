@@ -110,9 +110,11 @@ namespace optimML{
             
             std::vector<multivar_func> multivar_priors;
             std::vector<multivar_func_d> multivar_priors_d;
-            
-            std::map<std::string, double> multivar_prior_params_d;
-            std::map<std::string, int> multivar_prior_params_i;
+            std::vector<std::vector<int> > multivar_prior_param_idx;
+
+            int n_multivar_priors; 
+            std::vector<std::map<std::string, double> > multivar_prior_params_d;
+            std::vector<std::map<std::string, int> > multivar_prior_params_i;
 
             std::vector<ll_hook> ll_hooks;
             std::vector<std::vector<double> > ll_hooks_data_d;
@@ -298,6 +300,8 @@ namespace optimML{
             bool remove_prior(int idx);
 
             bool add_multivar_prior(multivar_func ll, multivar_func_d dll);
+            bool add_multivar_prior(std::vector<int>& inds, multivar_func ll, multivar_func_d dll);
+
             bool remove_multivar_prior(int i);
 
             bool add_normal_prior(int idx, double mu, double sigma);
@@ -315,9 +319,13 @@ namespace optimML{
             
             bool add_multivar_prior_param(std::string name, double data);
             bool add_multivar_prior_param(std::string name, int data);
-            
+            bool add_multivar_prior_param(std::string name, int ix, double data);
+            bool add_multivar_prior_param(std::string name, int ix, int data);
+
             bool set_multivar_prior_param(std::string name, double data);
             bool set_multivar_prior_param(std::string name, int data);
+            bool set_multivar_prior_param(std::string name, int ix, double data);
+            bool set_multivar_prior_param(std::string name, int ix, int data);
 
             void add_likelihood_hook(ll_hook fun, std::vector<double>& ddat,
                 std::vector<int>& idat);

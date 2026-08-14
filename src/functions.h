@@ -13,10 +13,14 @@
 #include <cstdlib>
 #include <utility>
 #include <math.h>
+#include <functional>
 
 // ===== useful functions =====
 
 double logit(double x);
 double expit(double x);
 double poisll(double x, double l);
+void bfgs(std::vector<double>& params,
+    std::function<void(const std::vector<double>&, double&, std::vector<double>&)> func);
+
 #endif
