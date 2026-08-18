@@ -40,6 +40,13 @@ namespace optimML{
             multivar_ml_solver(std::vector<double> params_init, multivar_func ll,
                 multivar_func_d dll);
             
+            multivar_ml_solver(std::vector<double> params_init, multivar_func_arr ll,
+                multivar_func_d_arr dll);
+
+            multivar_ml_solver(std::vector<double> params_init, multivar_func_combined f);
+            
+            multivar_ml_solver(std::vector<double> params_init, multivar_func_combined_arr f);
+
             bool solve();
 
             bool explore_starting_mixcomps();

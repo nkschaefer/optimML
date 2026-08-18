@@ -46,8 +46,9 @@ namespace optimML{
         pool_open = false;
         threads_init = false;
         
-        silent = false;
         ll_data_points = false;
+        arrdata = NULL;
+        arrdata_dim = 0;
     }
     
     /**
@@ -516,6 +517,72 @@ namespace optimML{
         }
         return true;
     }
+    
+    bool solver::check_arrdata(vector<vector<double> >& dat, bool replace){
+        if (!initialized){
+            fprintf(stderr, "ERROR: not initialized.\n");
+            return false;
+        }
+        if (replace){
+            if (arrdata_dim == 0){
+                fprintf(stderr, "ERROR: no existing arrdata to replace\n");
+                return false;
+            }
+        }
+        if (dat.size() == 0){
+            fprintf(stderr, "ERROR: arrdata has zero rows.\n");
+            return false;
+        }
+        if (n_data != 0 && n_data != dat.size()){
+            fprintf(stderr, "ERROR: arrdata does not match existing number of \
+data rows: %d vs %ld\n", n_data, dat.size());
+            return false;
+        }
+        else if (n_data == 0){
+            n_data = dat.size();
+        }
+        if (arrdata_dim != 0){
+            if (arrdata_dim != dat[0].size()){
+                fprintf(stderr, "ERROR: arrdata row length mismatch: %d vs %ld\n", 
+                    arrdata_dim, dat[0].size());
+                return false;
+            }
+        }
+        else{
+            arrdata_dim = dat[0].size();
+        }
+        for (int i = 1; i < dat.size(); ++i){
+            if (dat[i].size() != arrdata_dim){
+                fprintf(stderr, "ERROR: arrdata row length mismatch: %d vs %ld\n",
+                    arrdata_dim, dat[i].size());
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Add arbitrary vectors of data (must be same dimension per row)
+     */
+    bool solver::add_arrdata(vector<vector<double> >& dat){
+        if (check_arrdata(dat, false)){ 
+            this->arrdata = &dat;
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Replace arbitrary vectors of data (must be same dimension per row)
+     */
+    bool solver::replace_arrdata(vector<vector<double> >& dat){
+        if (check_arrdata(dat, true)){
+            this->arrdata = &dat;
+            return true;
+        }
+        return false;
+    }
+
     /**
      * If the user has only provided fixed data (and no regular type data), 
      * treat the fixed data like regular data.
@@ -742,10 +809,6 @@ namespace optimML{
         nthread = nt;
     }
     
-    void solver::set_silent(bool s){
-        silent = s;    
-    }
-
     void solver::prepare_data(int i, int thread_idx){
         // Update parameter maps that will be sent to functions
         if (threads_init && thread_idx >= 0){

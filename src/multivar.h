@@ -33,6 +33,12 @@ namespace optimML{
     typedef std::function< double ( const std::vector<double>&,
         const std::map<std::string, double >&,
         const std::map<std::string, int>& ) > multivar_func;
+    
+    typedef std::function< double ( const std::vector<double>&,
+        const std::map<std::string, double >&,
+        const std::map<std::string, int>&,
+        const std::vector<double>&,
+        const int ) > multivar_func_arr;
 
     // Derivative of above - modifies last parameter to contain gradient
     // values instead of returning a single value
@@ -41,6 +47,13 @@ namespace optimML{
         const std::map<std::string, double>&,
         const std::map<std::string, int>&,
         std::vector<double>& ) > multivar_func_d;
+    
+    typedef std::function< void ( const std::vector<double>&,
+        const std::map<std::string, double>&,
+        const std::map<std::string, int>&,
+        const std::vector<double>&,
+        const int,
+        std::vector<double>& ) > multivar_func_d_arr;
 
     // Second derivative - modifies last parameter to contain Hessian values
     // instead of returning a single value
@@ -50,6 +63,26 @@ namespace optimML{
         const std::map<std::string, int>&,
         std::vector<std::vector<double> >& ) > multivar_func_d2;   
     
+    typedef std::function< void ( const std::vector<double>&,
+        const std::map<std::string, double>&,
+        const std::map<std::string, int>&,
+        const std::vector<double>&,
+        const int,
+        std::vector<std::vector<double > >& ) > multivar_func_d2_arr;
+
+    // Single function computing both log likelihood and gradient
+    typedef std::function< double (const std::vector<double>&,
+        const std::map<std::string, double>&,
+        const std::map<std::string, int>&,
+        std::vector<double>& ) > multivar_func_combined;
+
+    typedef std::function< double (const std::vector<double>&,
+        const std::map<std::string, double>&,
+        const std::map<std::string, int>&,
+        const std::vector<double>&,
+        const int,
+        std::vector<double>& ) > multivar_func_combined_arr;
+
     // Arbitrary function to hook into log likelihood evaluation at the end
     // and adjust it
     
@@ -67,8 +100,15 @@ namespace optimML{
         protected:
             
             static void dummy_d2_func(const std::vector<double>& p, 
-                const std::map<std::string, double>& params_d,
-                const std::map<std::string, int>& params_i, 
+                const std::map<std::string, double>& data_d,
+                const std::map<std::string, int>& data_i, 
+                std::vector<std::vector<double> >& results);
+            
+            static void dummy_d2_func_arr(const std::vector<double>& p, 
+                const std::map<std::string, double>& data_d,
+                const std::map<std::string, int>& data_i, 
+                const std::vector<double>& data_arr,
+                const int num_data_arr,
                 std::vector<std::vector<double> >& results);
 
             // How many variables in x?
@@ -156,13 +196,28 @@ namespace optimML{
             // Hessian
             std::vector<std::vector<double> > H;
             
+            // Did the user specify a function that takes extra 
+            // array-format data?         
+            bool has_arrdata;
+                    
             // How do we compute log likelihood?
             multivar_func ll_x;
+            multivar_func_arr ll_x_arr;
+
             // How do we compute derivative of log likelihood?
             multivar_func_d dll_dx;
+            multivar_func_d_arr dll_dx_arr;
+
             // How do we compute 2nd derivative of log likelihood?
             multivar_func_d2 d2ll_dx2;
-            
+            multivar_func_d2_arr d2ll_dx2_arr;
+
+            // Alternatively, one function can compute both log likelihood and gradient
+            multivar_func_combined llg_x;
+            multivar_func_combined_arr llg_x_arr;
+
+            bool funcs_combined;
+
             // Does this solver have the need/ability to calculate the second derivative?    
             bool has_2d;
 
@@ -245,9 +300,6 @@ namespace optimML{
             
             void fill_results(double ll);
             
-            void print_function_error(int thread_idx=-1);
-            void print_function_error_prior(int idx);
-            
             void init_params(std::vector<double> params_init);
             bool replace_params(std::vector<double>& params_init);
             
@@ -286,10 +338,25 @@ namespace optimML{
 
             void init(std::vector<double> params_init, multivar_func ll, 
                 multivar_func_d dll, multivar_func_d2 d2ll);
-            
+            void init(std::vector<double> params_init, multivar_func_arr ll,
+                multivar_func_d_arr dll, multivar_func_d2_arr d2ll);
+
             void init(std::vector<double> params_init, multivar_func ll,
                 multivar_func_d dll);
-            
+            void init(std::vector<double> params_init, multivar_func_arr ll,
+                multivar_func_d_arr dll);
+
+            void init(std::vector<double> params_init, multivar_func_combined f);
+            void init(std::vector<double> params_init, multivar_func_combined_arr f);
+
+            void replace_funcs(multivar_func ll, multivar_func_d dll);
+            void replace_funcs(multivar_func_arr ll, multivar_func_d_arr dll);
+            void replace_funcs(multivar_func ll, multivar_func_d dll, multivar_func_d2 d2ll);
+            void replace_funcs(multivar_func_arr ll, multivar_func_d_arr dll,
+                 multivar_func_d2_arr d2ll);
+            void replace_funcs(multivar_func_combined f);
+            void replace_funcs(multivar_func_combined_arr f);
+
             void add_one_param(double p); 
             multivar();
             ~multivar();

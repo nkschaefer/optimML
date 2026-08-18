@@ -46,6 +46,8 @@ namespace optimML{
             std::map<std::string, double> data_d;
             std::map<std::string, int> data_i;
             std::vector<double> params;
+            std::vector<double> arr_row;
+            bool has_arr;
 
             math_error(int pi, 
                     bool d, 
@@ -54,7 +56,8 @@ namespace optimML{
                     const std::map<std::string, double>& dd,
                     const std::map<std::string, int>& di, 
                     const std::vector<double>& pa, 
-                    const std::string& msg){
+                    const std::string& msg,
+                    std::vector<double>* arrptr = NULL){
                 
                 param_idx = pi;
                 deriv = d;
@@ -64,6 +67,13 @@ namespace optimML{
                 data_d = dd;
                 data_i = di;
                 params = pa;
+                if (arrptr != NULL){
+                    has_arr = true;
+                    arr_row = *arrptr;
+                }
+                else{
+                    has_arr = false;
+                }
                 
                 char buf[1024];
                 if (param_idx == -1){
@@ -94,13 +104,20 @@ namespace optimML{
                     std::string tmp = &buf[0];
                     message += tmp; 
                 }
+                if (arrptr != NULL){
+                    line = "  Array data:\n";
+                    message += line;
+                    for (int i = 0; i < arrptr->size(); ++i){
+                        sprintf(&buf[0], "    %d) %f\n", i, (*arrptr)[i]);
+                        std::string tmp = &buf[0];
+                        message += tmp;    
+                    }
+                }
             };
             const char* what() const noexcept override{
                 return message.c_str();
             };
     };    
-    // Exception code for math issues
-    //const int OPTIMML_MATH_ERR = 123;
 
     // Function for prior distributions over individual x variables
     typedef std::function< double( double,
@@ -155,12 +172,13 @@ namespace optimML{
             // How many data points are there?
             int n_data;
             
+            // Store keyed data for function evaluations
             std::vector<std::string> params_double_names;
             std::vector<double*> params_double_vals;
             
             std::vector<std::string> params_int_names;
             std::vector<int*> params_int_vals;
-            
+             
             std::map<std::string, double> param_double_cur;
             std::map<std::string, int> param_int_cur;
            
@@ -173,6 +191,11 @@ namespace optimML{
 
             std::vector<double*> param_double_ptr;
             std::vector<int*> param_int_ptr;
+            
+            // Store arbitrary arrays of data for function evaluations
+            int arrdata_dim;
+            std::vector<std::vector<double> >* arrdata;
+            std::vector<double> arrdata_empty_row;
 
             // Maximum iterations
             int maxiter;
@@ -180,6 +203,9 @@ namespace optimML{
             // Delta threshold
             double delta_thresh;   
             
+            // Helper function for adding arrdata
+            bool check_arrdata(std::vector<std::vector<double> >& dat, bool replace);
+
             // To be called before function evaluations: fill data structures with current
             // data points, given index            
             void prepare_data(int i, int thread_idx = -1);
@@ -224,9 +250,6 @@ namespace optimML{
             int get_next_job();
             virtual void worker(int thread_idx);
             void close_pool();
-            
-            // Set to true to suppress math error messages
-            bool silent; 
 
         public:
             
@@ -246,7 +269,10 @@ namespace optimML{
             bool replace_data_fixed(std::string name, double data);
             bool add_data_fixed(std::string name, int data);
             bool replace_data_fixed(std::string name, int data);
-            
+             
+            bool add_arrdata(std::vector<std::vector<double> >& data);
+            bool replace_arrdata(std::vector<std::vector<double> >& data);
+             
             bool add_weights(std::vector<double>& weights);
             bool update_weights(std::vector<double>& weights);
 
@@ -254,7 +280,6 @@ namespace optimML{
             void set_maxiter(int i);   
             void set_threads(int nt);
             
-            void set_silent(bool s);
             int get_n_data();
 
             double log_likelihood;

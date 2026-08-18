@@ -80,10 +80,6 @@ namespace optimML{
             double bound_low;
             double bound_high;
 
-            // Print warning messages for bad function evaluations
-            void dump_cur_params();
-            void dump_prior_params();
-
             // Evaluate all functions at current parameter value
             void eval_funcs(double x, bool eval_ll_x, bool eval_dll_dx, bool eval_d2ll_dx2);
             double eval_ll_x(double x);

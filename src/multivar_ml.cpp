@@ -34,12 +34,29 @@ namespace optimML{
     multivar_ml_solver::multivar_ml_solver(){
         // Parent constructor should handle everything important
         nthread_bfgs = 1;
-        delta_thresh = 1e-8;
     }
 
     multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
         multivar_func ll, multivar_func_d dll){
         init(params_init, ll, dll);
+        nthread_bfgs = 1;
+    }
+    
+    multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
+       multivar_func_arr ll, multivar_func_d_arr dll){
+        init(params_init, ll, dll);
+        nthread_bfgs = 1;
+    }
+
+    multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
+        multivar_func_combined f){
+        init(params_init, f);
+        nthread_bfgs = 1;
+    }
+
+    multivar_ml_solver::multivar_ml_solver(vector<double> params_init,
+        multivar_func_combined_arr f){
+        init(params_init, f);
         nthread_bfgs = 1;
     }
     
@@ -230,6 +247,7 @@ namespace optimML{
                     }
                     x_t_extern[x_t_extern.size()-1] = p;
                 }
+
                 // Evaluate functions
                 loglik += eval_ll_x(i);
                 eval_dll_dx(i);
@@ -270,7 +288,6 @@ namespace optimML{
         dt_dx.clear();
         dy_dt.clear();
         dy_dt_prior.clear();
-        
         for (int i = 0; i < n_param; ++i){
             // Gradient
             //G.push_back(0.0);
@@ -289,12 +306,10 @@ namespace optimML{
             // Set up everything
             create_threads();
         }
-
         std::function<void(const STLBFGS::vector&, double&, STLBFGS::vector&)> f = 
             [=](const STLBFGS::vector& a, double& b, STLBFGS::vector& c) {
             this->eval_funcs_bfgs(a, b, c);
         };
-        
         STLBFGS::Optimizer opt{f, nthread_bfgs, 10};
         opt.verbose = false;
         opt.ftol = delta_thresh;
@@ -306,7 +321,6 @@ namespace optimML{
         }
         double ll = eval_ll_all();
         fill_results(ll);
-        
         // Fill SE values
         
         vector<double> basisv(n_param-nmixcomp, 0);

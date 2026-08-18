@@ -35,11 +35,21 @@ using namespace std;
 namespace optimML{
     
     void multivar::dummy_d2_func(const vector<double>& params,
-        const map<string, double>& params_d, const map<string, int>& params_i, 
+        const map<string, double>& data_d, 
+        const map<string, int>& data_i, 
         vector<vector<double> >& results){
         // Do nothing
     }
-
+    
+    void multivar::dummy_d2_func_arr(const vector<double>& params,
+        const map<string, double>& data_d, 
+        const map<string, int>& data_i,
+        const vector<double>& data_arr,
+        const int n_data_arr, 
+        vector<vector<double> >& results){
+        // Do nothing
+    }
+    
     multivar::multivar(){
         srand(time(NULL));   
         
@@ -53,6 +63,9 @@ namespace optimML{
         xval_log_max = log(xval_max);
         xval_logit_min = logit(xval_min);
         xval_logit_max = logit(1.0-xval_min);
+        
+        funcs_combined = false;
+        has_arrdata = false;
         
         nthread = 0;    
         initialized = false;
@@ -107,6 +120,12 @@ namespace optimML{
         this->ll_x = m.ll_x;
         this->dll_dx = m.dll_dx;
         this->d2ll_dx2 = m.d2ll_dx2;
+        this->llg_x = m.llg_x;
+        this->ll_x_arr = m.ll_x_arr;
+        this->dll_dx_arr = m.dll_dx_arr;
+        this->d2ll_dx2_arr = m.d2ll_dx2_arr;
+        this->llg_x_arr = m.llg_x_arr;
+        this->has_arrdata = m.has_arrdata; 
         this->has_2d = m.has_2d;
         this->has_prior = m.has_prior;
         this->has_prior_mixcomp = m.has_prior_mixcomp;
@@ -160,6 +179,9 @@ namespace optimML{
         this->multivar_prior_params_d = m.multivar_prior_params_d;
         this->multivar_prior_params_i = m.multivar_prior_params_i;
         this->multivar_prior_param_idx = m.multivar_prior_param_idx;
+        
+        this->funcs_combined = m.funcs_combined;
+
     }
 
     multivar::~multivar(){
@@ -286,6 +308,56 @@ namespace optimML{
         }
         return true;
     }
+    
+    void multivar::replace_funcs(multivar_func x, multivar_func_d y){
+        ll_x = x;
+        dll_dx = y;
+        has_2d = false;
+        funcs_combined = false;
+        has_arrdata = false;
+    }
+
+    void multivar::replace_funcs(multivar_func_arr x, multivar_func_d_arr y){
+        ll_x_arr = x;
+        dll_dx_arr = y;
+        has_2d = false;
+        funcs_combined = false;
+        has_arrdata = true;
+    }
+
+    void multivar::replace_funcs(multivar_func x, multivar_func_d y,
+        multivar_func_d2 z){
+        ll_x = x;
+        dll_dx = y;
+        d2ll_dx2 = z;
+        has_2d = true;
+        funcs_combined = false;
+        has_arrdata = false;
+    }
+    
+    void multivar::replace_funcs(multivar_func_arr x, multivar_func_d_arr y,
+        multivar_func_d2_arr z){
+        ll_x_arr = x;
+        dll_dx_arr = y;
+        d2ll_dx2_arr = z;
+        has_2d = true;
+        funcs_combined = false;
+        has_arrdata = true;
+    }
+
+    void multivar::replace_funcs(multivar_func_combined x){
+        llg_x = x;
+        has_2d = false;
+        funcs_combined = true;
+        has_arrdata = false;
+    }
+
+    void multivar::replace_funcs(multivar_func_combined_arr x){
+        llg_x_arr = x;
+        has_2d = false;
+        funcs_combined = true;
+        has_arrdata = true;
+    }
 
     void multivar::init(vector<double> params_init, multivar_func ll,
         multivar_func_d dll, multivar_func_d2 dll2){
@@ -301,6 +373,29 @@ namespace optimML{
         has_2d = true;
         initialized = true;
         has_any_param_grp_prior = false;
+        funcs_combined = false;
+        has_arrdata = false;
+    }
+    
+    void multivar::init(vector<double> params_init, 
+        multivar_func_arr ll,
+        multivar_func_d_arr dll, 
+        multivar_func_d2_arr dll2){
+
+        if (!initialized){
+            init_params(params_init);
+        }
+        else{
+            replace_params(params_init);
+        }
+        ll_x_arr = ll;
+        dll_dx_arr = dll;
+        d2ll_dx2_arr = dll2;
+        has_2d = true;
+        initialized = true;
+        has_any_param_grp_prior = false;
+        funcs_combined = false;
+        has_arrdata = true;
     }
 
     void multivar::init(vector<double> params_init, multivar_func ll,
@@ -317,8 +412,60 @@ namespace optimML{
         has_2d = false;
         initialized = true;
         has_any_param_grp_prior = false;
+        funcs_combined = false;
+        has_arrdata = false;
     }
     
+    void multivar::init(vector<double> params_init, multivar_func_arr ll,
+        multivar_func_d_arr dll){
+        if (!initialized){
+            init_params(params_init);
+        }
+        else{
+            replace_params(params_init);
+        }
+        ll_x_arr = ll;
+        dll_dx_arr = dll;
+        d2ll_dx2_arr = dummy_d2_func_arr;
+        has_2d = false;
+        initialized = true;
+        has_any_param_grp_prior = false;
+        funcs_combined = false;
+        has_arrdata = true;
+    }
+
+    void multivar::init(vector<double> params_init, multivar_func_combined f){
+        if (!initialized){
+            init_params(params_init);
+        }
+        else{
+            replace_params(params_init);
+        }
+        llg_x = f;
+        d2ll_dx2 = dummy_d2_func;
+        has_2d = false;
+        funcs_combined = true;
+        initialized = true;
+        has_any_param_grp_prior = false;
+        has_arrdata = false; 
+    }
+    
+    void multivar::init(vector<double> params_init, multivar_func_combined_arr f){
+        if (!initialized){
+            init_params(params_init);
+        }
+        else{
+            replace_params(params_init);
+        }
+        llg_x_arr = f;
+        d2ll_dx2_arr = dummy_d2_func_arr;
+        has_2d = false;
+        funcs_combined = true;
+        initialized = true;
+        has_any_param_grp_prior = false;
+        has_arrdata = true; 
+    }
+
     bool multivar::add_prior(int idx, prior_func ll,
         prior_func dll, prior_func dll2){
         
@@ -1173,7 +1320,7 @@ part of a param grp.\n");
             exit(1);
         }
         if (idx >= n_param-nmixcomp){
-            fprintf(stderr, "ERROR: illegal parameter index\n");
+            fprintf(stderr, "ERROR: illegal parameter index %d with %d params\n", idx, n_param-nmixcomp);
             return false;
         }
         else if (this->trans_log[idx] && val <= 0){
@@ -1329,63 +1476,6 @@ part of a param grp.\n");
     */
 
     /**
-     * When something goes wrong in function evaluation, send a message to stderr.
-     */
-    void multivar::print_function_error(int thread_idx){
-        if (silent){
-            return;
-        }
-        fprintf(stderr, "parameters:\n");
-        for (int i = 0; i < x_t_extern.size(); ++i){
-            fprintf(stderr, "%d): %f\n", i, x_t_extern[i]);
-        }
-        fprintf(stderr, "data:\n");
-        if (thread_idx != -1){
-            for (map<string, double>::iterator p = this->params_double_cur_thread[thread_idx].begin(); 
-                p != this->params_double_cur_thread[thread_idx].end(); ++p){
-                fprintf(stderr, "  %s = %f\n", p->first.c_str(), p->second);
-            }
-            for (map<string, int>::iterator i = this->params_int_cur_thread[thread_idx].begin();
-                i != this->params_int_cur_thread[thread_idx].end(); ++i){
-                fprintf(stderr, "  %s = %d\n", i->first.c_str(), i->second);
-            }
-        }
-        else{
-            for (map<string, double>::iterator p = this->param_double_cur.begin(); 
-                p != this->param_double_cur.end(); ++p){
-                fprintf(stderr, "  %s = %f\n", p->first.c_str(), p->second);
-            }
-            for (map<string, int>::iterator i = this->param_int_cur.begin();
-                i != this->param_int_cur.end(); ++i){
-                fprintf(stderr, "  %s = %d\n", i->first.c_str(), i->second);
-            }
-        }
-        
-    }
-
-    /**
-     * When something goes wrong in evaluating a prior function, send a message
-     * to stderr.
-     */
-    void multivar::print_function_error_prior(int idx){
-        if (silent){
-            return;
-        }
-        fprintf(stderr, "parameter:\n");
-        fprintf(stderr, "%d): %f\n", idx, x_t_extern[idx]);
-        fprintf(stderr, "data:\n");
-
-        for (map<string, double>::iterator p = this->params_prior_double[idx].begin(); 
-            p != this->params_prior_double[idx].end(); ++p){
-            fprintf(stderr, "  %s = %f\n", p->first.c_str(), p->second);
-        }
-        for (map<string, int>::iterator i = this->params_prior_int[idx].begin();
-            i != this->params_prior_int[idx].end(); ++i){
-            fprintf(stderr, "  %s = %d\n", i->first.c_str(), i->second);
-        }
-    }
-    
-    /**
      * Evaluate log likelihood at current vector of values
      * index is either an index into the data (gives us a vector of data values
      * for a single observation)
@@ -1394,27 +1484,183 @@ part of a param grp.\n");
     double multivar::eval_ll_x(int i, int thread_idx){
         double f_x = 0.0;
         if (i >= 0){
+
             // Get log likelihood of one (current) row of data
             double ll = 0.0;
-            if (thread_idx >= 0){
-                if (nmixcomp > 0){
-                    ll = ll_x(x_t_extern_thread[thread_idx], this->params_double_cur_thread[thread_idx],
-                        this->params_int_cur_thread[thread_idx]);
+            
+            if (funcs_combined){
+                // Zero out gradient
+                for (int z = 0; z < n_param_extern; ++z){
+                    if (thread_idx >= 0){
+                        this->dy_dt_extern_thread[thread_idx][z] = 0.0;
+                    }
+                    else{
+                        this->dy_dt_extern[z] = 0.0;
+                    }
+                }
+                
+                // Call combined log likelihood & derivative function
+                if (thread_idx >= 0){
+                    if (nmixcomp > 0){
+                        if (has_arrdata){
+                            if (arrdata_dim == 0){
+                                ll = llg_x_arr(x_t_extern_thread[thread_idx],
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    arrdata_empty_row,
+                                    this->arrdata_dim,
+                                    this->dy_dt_extern_thread[thread_idx]);
+                            }
+                            else{
+                                ll = llg_x_arr(x_t_extern_thread[thread_idx],
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    (*arrdata)[i],
+                                    this->arrdata_dim,
+                                    this->dy_dt_extern_thread[thread_idx]); 
+                            }
+                        }
+                        else{
+                            ll = llg_x(x_t_extern_thread[thread_idx], 
+                                this->params_double_cur_thread[thread_idx],
+                                this->params_int_cur_thread[thread_idx], 
+                                this->dy_dt_extern_thread[thread_idx]); 
+                        }
+                    }
+                    else{
+                        if (has_arrdata){
+                            if (arrdata_dim == 0){
+                                ll = llg_x_arr(x_t_extern,
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    arrdata_empty_row,
+                                    this->arrdata_dim,
+                                    this->dy_dt_extern_thread[thread_idx]);
+                            }
+                            else{
+                                ll = llg_x_arr(x_t_extern,
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    (*arrdata)[i],
+                                    this->arrdata_dim,
+                                    this->dy_dt_extern_thread[thread_idx]);
+                            }
+                        }
+                        else{
+                            ll = llg_x(x_t_extern, 
+                                this->params_double_cur_thread[thread_idx],
+                                this->params_int_cur_thread[thread_idx], 
+                                this->dy_dt_extern_thread[thread_idx]);
+                        }
+                    }
                 }
                 else{
-                    ll = ll_x(x_t_extern, this->params_double_cur_thread[thread_idx],
-                        this->params_int_cur_thread[thread_idx]);
-                }
+                    if (has_arrdata){
+                        if (arrdata_dim == 0){
+                            ll = llg_x_arr(x_t_extern,
+                                this->param_double_cur,
+                                this->param_int_cur,
+                                arrdata_empty_row,
+                                this->arrdata_dim,
+                                this->dy_dt_extern);
+                        }
+                        else{
+                            ll = llg_x_arr(x_t_extern,
+                                this->param_double_cur,
+                                this->param_int_cur,
+                                (*arrdata)[i],
+                                this->arrdata_dim,
+                                this->dy_dt_extern);
+                        }
+                    }
+                    else{
+                        ll = llg_x(x_t_extern, 
+                            this->param_double_cur, 
+                            this->param_int_cur, 
+                            this->dy_dt_extern); 
+                    }
+                }  
+                
+                // NOTE: gradient-relevant stuff is now stored in either dy_dt_extern
+                // or dy_dt_extern_thread.
+
+                // When eval_dll_dx() is evaluated on this same row, it will handle the
+                // gradient contribution.
             }
             else{
-                ll = ll_x(x_t_extern, this->param_double_cur, this->param_int_cur);
+                if (thread_idx >= 0){
+                    if (nmixcomp > 0){
+                        if (has_arrdata){
+                            if (arrdata_dim == 0){
+                                ll = ll_x_arr(x_t_extern_thread[thread_idx],
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    arrdata_empty_row,
+                                    this->arrdata_dim);
+                            }
+                            else{
+                                ll = ll_x_arr(x_t_extern_thread[thread_idx],
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    (*arrdata)[i],
+                                    this->arrdata_dim);
+                            }
+                        }
+                        else{
+                            ll = ll_x(x_t_extern_thread[thread_idx], 
+                                this->params_double_cur_thread[thread_idx],
+                                this->params_int_cur_thread[thread_idx]);
+                        }
+                    }
+                    else{
+                        if (has_arrdata){
+                            if (arrdata_dim == 0){
+                                ll = ll_x_arr(x_t_extern,
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    arrdata_empty_row,
+                                    this->arrdata_dim);
+                            }
+                            else{
+                                ll = ll_x_arr(x_t_extern,
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    (*arrdata)[i],
+                                    this->arrdata_dim);
+                            }
+                        }
+                        else{
+                            ll = ll_x(x_t_extern, 
+                                this->params_double_cur_thread[thread_idx],
+                                this->params_int_cur_thread[thread_idx]);
+                        }
+                    }
+                }
+                else{
+                    if (has_arrdata){
+                        if (arrdata_dim == 0){
+                            ll = ll_x_arr(x_t_extern,
+                                this->param_double_cur,
+                                this->param_int_cur,
+                                arrdata_empty_row,
+                                this->arrdata_dim);
+                        }
+                        else{
+                            ll = ll_x_arr(x_t_extern,
+                                this->param_double_cur,
+                                this->param_int_cur,
+                                (*arrdata)[i],
+                                this->arrdata_dim);
+                        }
+                    }
+                    else{
+                        ll = ll_x(x_t_extern, 
+                            this->param_double_cur, 
+                            this->param_int_cur);
+                    }
+                }
             }
             if (isnan(ll) || isinf(ll)){
-                if (!silent){
-                    //fprintf(stderr, "ERROR: illegal value returned by log likelihood function\n");
-                }
-                //print_function_error(thread_idx);
-                //throw optimML::OPTIMML_MATH_ERR;
                 if (thread_idx >= 0){
                     throw optimML::math_error(-1, false, false, false, 
                         params_double_cur_thread[thread_idx],
@@ -1442,12 +1688,6 @@ part of a param grp.\n");
                     double ll = ll_x_prior[j](x_t_extern[j], 
                         this->params_prior_double[j], this->params_prior_int[j]);
                     if (isnan(ll) || isinf(ll)){
-                        if (!silent){
-                            //fprintf(stderr, "ERROR: illegal value returned by prior log likelihood function on \
-    parameter %d\n", j);
-                        }
-                        //print_function_error_prior(j);
-                        //throw optimML::OPTIMML_MATH_ERR;
                         throw optimML::math_error(j, false, false, true,
                             params_prior_double[j],
                             params_prior_int[j],
@@ -1591,29 +1831,102 @@ part of a param grp.\n");
      */
     void multivar::eval_dll_dx(int i, int thread_idx){
         if (i >= 0){
-            // Zero out derivative
-            for (int z = 0; z < n_param_extern; ++z){
+            
+            // If funcs_combined (using a single function to compute both
+            // log likelihood and gradient), then dy_dt was already populated
+            // by a function call from within eval_ll_x for this row of data.
+            // We just need to transfer that info to the gradient array.
+
+            if (!funcs_combined){
+                // Zero out derivative
+                for (int z = 0; z < n_param_extern; ++z){
+                    if (thread_idx >= 0){
+                        this->dy_dt_extern_thread[thread_idx][z] = 0.0;
+                    }
+                    else{
+                        this->dy_dt_extern[z] = 0.0;
+                    }
+                }
                 if (thread_idx >= 0){
-                    this->dy_dt_extern_thread[thread_idx][z] = 0.0;
+                    if (nmixcomp > 0){
+                        if (has_arrdata){
+                            if (arrdata_dim == 0){
+                                dll_dx_arr(x_t_extern_thread[thread_idx],
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    arrdata_empty_row,
+                                    this->arrdata_dim,
+                                    dy_dt_extern_thread[thread_idx]);
+                            }
+                            else{
+                                dll_dx_arr(x_t_extern_thread[thread_idx],
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    (*arrdata)[i],
+                                    this->arrdata_dim,
+                                    dy_dt_extern_thread[thread_idx]);
+                            }
+                        }
+                        else{
+                            dll_dx(x_t_extern_thread[thread_idx], 
+                                this->params_double_cur_thread[thread_idx],
+                                this->params_int_cur_thread[thread_idx],
+                                dy_dt_extern_thread[thread_idx]);
+                        }
+                    }
+                    else{
+                        if (has_arrdata){
+                            if (arrdata_dim == 0){
+                                dll_dx_arr(x_t_extern,
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    arrdata_empty_row,
+                                    this->arrdata_dim,
+                                    dy_dt_extern_thread[thread_idx]);
+                            }
+                            else{
+                                dll_dx_arr(x_t_extern,
+                                    this->params_double_cur_thread[thread_idx],
+                                    this->params_int_cur_thread[thread_idx],
+                                    (*arrdata)[i],
+                                    this->arrdata_dim,
+                                    dy_dt_extern_thread[thread_idx]);
+                            }
+                        }
+                        else{
+                            dll_dx(x_t_extern, 
+                                this->params_double_cur_thread[thread_idx],
+                                this->params_int_cur_thread[thread_idx],
+                                dy_dt_extern_thread[thread_idx]);
+                        }
+                    }
                 }
                 else{
-                    this->dy_dt_extern[z] = 0.0;
+                    if (has_arrdata){
+                        if (arrdata_dim == 0){
+                            dll_dx_arr(x_t_extern,
+                                this->param_double_cur,
+                                this->param_int_cur,
+                                arrdata_empty_row,
+                                this->arrdata_dim,
+                                dy_dt_extern);
+                        }
+                        else{
+                            dll_dx_arr(x_t_extern,
+                                this->param_double_cur,
+                                this->param_int_cur,
+                                (*arrdata)[i],
+                                this->arrdata_dim,
+                                dy_dt_extern);
+                        }
+                    }
+                    else{
+                        dll_dx(x_t_extern, 
+                            this->param_double_cur, 
+                            this->param_int_cur, 
+                            dy_dt_extern);
+                    }
                 }
-            }
-            if (thread_idx >= 0){
-                if (nmixcomp > 0){
-                    dll_dx(x_t_extern_thread[thread_idx], this->params_double_cur_thread[thread_idx],
-                        this->params_int_cur_thread[thread_idx],
-                        dy_dt_extern_thread[thread_idx]);
-                }
-                else{
-                    dll_dx(x_t_extern, this->params_double_cur_thread[thread_idx],
-                        this->params_int_cur_thread[thread_idx],
-                        dy_dt_extern_thread[thread_idx]);
-                }
-            }
-            else{
-                dll_dx(x_t_extern, this->param_double_cur, this->param_int_cur, dy_dt_extern);
             }
             for (int j = 0; j < n_param_extern; ++j){
                 int err = -1;
@@ -1629,11 +1942,6 @@ part of a param grp.\n");
                     }
                 }
                 if (err != -1){
-                    if (!silent){
-                        //fprintf(stderr, "ERROR: invalid value returned by gradient function: parameter %d\n", err);
-                    }
-                    //print_function_error(thread_idx);
-                    //throw optimML::OPTIMML_MATH_ERR;
                     if (thread_idx >= 0){
                         throw optimML::math_error(err, true, false, false,
                             params_double_cur_thread[thread_idx],
@@ -1739,12 +2047,6 @@ part of a param grp.\n");
                         double dllprior = dll_dx_prior[j](x_t[j], this->params_prior_double[j], 
                             this->params_prior_int[j]);
                         if (isnan(dllprior) || isinf(dllprior)){
-                            if (!silent){
-                                //fprintf(stderr, "ERROR: illegal value returned by prior gradient function on \
-    parameter %d\n", j);
-                            }
-                            //print_function_error_prior(j); 
-                            //throw optimML::OPTIMML_MATH_ERR;
                             throw optimML::math_error(j, true, false, true, 
                                 params_prior_double[j],
                                 params_prior_int[j],
@@ -1845,11 +2147,15 @@ part of a param grp.\n");
             */
         }
     }
-
+    
     /**
      * Evaluate second derivative at current parameter values; store results in
-     * Hessian matrix. This function might be unnecessary but can be used by
+     * Hessian matrix. 
+     *
+     * This function is currently unnecessary, can maybe be used by
      * future child classes.
+     *
+     * To use it, need to add support for threads, etc.
      */
     void multivar::eval_d2ll_dx2(int i){
         if (!has_2d){
@@ -1861,7 +2167,31 @@ part of a param grp.\n");
                     this->d2y_dt2_extern[z][zz] = 0.0;
                 }
             }
-            d2ll_dx2(x_t_extern, this->param_double_cur, this->param_int_cur, this->d2y_dt2_extern);
+            
+            if (has_arrdata){
+                if (arrdata_dim == 0){
+                    d2ll_dx2_arr(x_t_extern,
+                        this->param_double_cur,
+                        this->param_int_cur,
+                        arrdata_empty_row,
+                        this->arrdata_dim,
+                        this->d2y_dt2_extern);
+                }
+                else{
+                    d2ll_dx2_arr(x_t_extern,
+                        this->param_double_cur,
+                        this->param_int_cur,
+                        (*arrdata)[i],
+                        this->arrdata_dim,
+                        this->d2y_dt2_extern);
+                }
+            }
+            else{
+                d2ll_dx2(x_t_extern, 
+                    this->param_double_cur, 
+                    this->param_int_cur, 
+                    this->d2y_dt2_extern);
+            }
             for (int j = 0; j < n_param_extern; ++j){
                 for (int k = 0; k < n_param_extern; ++k){
                     if (isnan(d2y_dt2_extern[j][k]) || isinf(d2y_dt2_extern[j][k])){
