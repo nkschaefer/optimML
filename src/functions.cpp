@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <iostream>
 #include <fstream>
+#include <array>
+#include <cmath>
 #include <sstream>
 #include <set>
 #include <cstdlib>
@@ -83,6 +85,20 @@ void bfgs(vector<double>& params,
     double res = opt.run(params);
 }
 
+/**
+ * Univariate Nelder-Mead algorithm: finds value of independent variable
+ * that maximizes the function value, given an initial guess.
+ *
+ * Returns: function evaluation at optimum
+ *
+ * Arguments:
+ * f: function to optimize
+ * guess: initial guess for independent variable
+ * best: best guess
+ * step: step size
+ * tol: step tolerance to determine convergence
+ * maxit: maximum number of iterations
+ */
 double nelder_mead_1d(const std::function<double(double)>& f,
     double guess, 
     double& best,
@@ -96,7 +112,10 @@ double nelder_mead_1d(const std::function<double(double)>& f,
     double fa = f(a);
     double fb = f(b);
     // Sort so a is the better (higher) point.
-    if (fb > fa) { std::swap(a, b); std::swap(fa, fb); }
+    if (fb > fa) { 
+        swap(a, b); 
+        swap(fa, fb); 
+    }
 
     // Standard coefficients.
     const double alpha = 1.0;   // reflection
@@ -116,15 +135,24 @@ double nelder_mead_1d(const std::function<double(double)>& f,
             // --- Reflection beat the best -> try expanding further. ---
             double e  = a + gamma * (r - a);
             double fe = f(e);
-            if (fe > fr) { b = e; fb = fe; }   // expansion better
-            else         { b = r; fb = fr; }   // reflection better
+            if (fe > fr){ 
+                b = e; 
+                fb = fe; 
+            }   // expansion better
+            else{ 
+                b = r; 
+                fb = fr; 
+            }   // reflection better
         }
         else {
             // --- Reflection didn't beat the best -> contract inward. ---
             // Contract between best (a) and worst (b).
             double c  = a + rho * (b - a);
             double fc = f(c);
-            if (fc > fb) { b = c; fb = fc; }   // contraction helped
+            if (fc > fb) { 
+                b = c; 
+                fb = fc; 
+            }   // contraction helped
             else {
                 // --- Shrink: pull worst halfway to best. ---
                 b  = a + 0.5 * (b - a);
@@ -133,13 +161,33 @@ double nelder_mead_1d(const std::function<double(double)>& f,
         }
 
         // Re-sort so a stays the better point.
-        if (fb > fa) { std::swap(a, b); std::swap(fa, fb); }
+        if (fb > fa) { 
+            swap(a, b); 
+            swap(fa, fb); 
+        }
     }
     
     best = a;
     return fa;
 }
 
+/**
+ * Bivariate Nelder-Mead algorithm: finds value of two independent variables
+ * that together maximize the function value, given an initial guess.
+ *
+ * Returns: function evaluation at optimum
+ *
+ * Arguments:
+ * f: function to optimize
+ * gx: independent variable 1 initial guess
+ * gy: independent variable 2 initial guess
+ * outx: independent variable 1 at optimum
+ * outy: independent variable 2 at optimum
+ * stepx: step size for moving independent variable 1
+ * stepy: step size for moving independent variable 2
+ * tol: step tolerance to determine convergence
+ * maxit: maximum number of iterations
+ */
 double nelder_mead_2d(const std::function<double(double,double)>& f,
     double gx, 
     double gy,
@@ -151,78 +199,103 @@ double nelder_mead_2d(const std::function<double(double,double)>& f,
     int maxit){
 
     // --- The 2D simplex: THREE vertices. ---
-    std::array<std::array<double, 2>, 3> v = {
-        std::array<double, 2>{ gx,         gy         },
-        std::array<double, 2>{ gx + stepx, gy         },
-        std::array<double, 2>{ gx,         gy + stepy }
+    array<array<double, 2>, 3> v = {
+        array<double, 2>{gx,gy},
+        array<double, 2>{gx + stepx, gy},
+        array<double, 2>{ gx, gy + stepy}
     };
-    std::array<double, 3> fv = { f(v[0][0], v[0][1]),
-                                 f(v[1][0], v[1][1]),
-                                 f(v[2][0], v[2][1]) };
+    array<double, 3> fv = { f(v[0][0], v[0][1]),
+        f(v[1][0], v[1][1]),
+    f(v[2][0], v[2][1]) };
 
     const double alpha = 1.0;   // reflection
     const double gamma = 2.0;   // expansion
-    const double rho   = 0.5;   // contraction
+    const double rho = 0.5;   // contraction
     const double sigma = 0.5;   // shrink
 
-    auto eval = [&](const std::array<double, 2>& p){ return f(p[0], p[1]); };
+    auto eval = [&](const array<double, 2>& p){ return f(p[0], p[1]); };
 
     for (int it = 0; it < maxit; ++it) {
         // 1. Sort so fv[0] >= fv[1] >= fv[2]  (best = highest = index 0,
         //    worst = lowest = index 2).
-        for (int i = 0; i < 3; ++i)
-            for (int j = i + 1; j < 3; ++j)
-                if (fv[j] > fv[i]) { std::swap(fv[i], fv[j]); std::swap(v[i], v[j]); }
+        for (int i = 0; i < 3; ++i){
+            for (int j = i + 1; j < 3; ++j){
+                if (fv[j] > fv[i]) { 
+                    swap(fv[i], fv[j]); 
+                    swap(v[i], v[j]); 
+                }
+            }
+        }
 
         // 2. Convergence: are all vertices close together?
-        double d1 = std::hypot(v[1][0]-v[0][0], v[1][1]-v[0][1]);
-        double d2 = std::hypot(v[2][0]-v[0][0], v[2][1]-v[0][1]);
-        if (d1 < tol && d2 < tol) break;
+        double d1 = hypot(v[1][0]-v[0][0], v[1][1]-v[0][1]);
+        double d2 = hypot(v[2][0]-v[0][0], v[2][1]-v[0][1]);
+        if (d1 < tol && d2 < tol){
+            break;
+        }
 
         // 3. Centroid of all vertices EXCEPT the worst (v[2]):
         //    midpoint of the two better vertices.
-        std::array<double, 2> c = { 0.5*(v[0][0]+v[1][0]),
-                                    0.5*(v[0][1]+v[1][1]) };
+        array<double, 2> c = { 0.5*(v[0][0]+v[1][0]),
+                               0.5*(v[0][1]+v[1][1]) };
 
         // 4. Reflection: reflect the worst through the centroid.
-        std::array<double, 2> r = { c[0] + alpha*(c[0]-v[2][0]),
-                                    c[1] + alpha*(c[1]-v[2][1]) };
+        array<double, 2> r = { c[0] + alpha*(c[0]-v[2][0]),
+                               c[1] + alpha*(c[1]-v[2][1]) };
         double fr = eval(r);
 
         if (fr > fv[0]) {
             // 5. Reflection is a new best (higher) -> try expanding further.
-            std::array<double, 2> e = { c[0] + gamma*(r[0]-c[0]),
-                                        c[1] + gamma*(r[1]-c[1]) };
+            array<double, 2> e = { c[0] + gamma*(r[0]-c[0]),
+                                   c[1] + gamma*(r[1]-c[1]) };
             double fe = eval(e);
-            if (fe > fr) { v[2] = e; fv[2] = fe; }   // expansion better
-            else         { v[2] = r; fv[2] = fr; }   // reflection better
+            if (fe > fr) { 
+                v[2] = e; 
+                fv[2] = fe; 
+            }   // expansion better
+            else{ 
+                v[2] = r; 
+                fv[2] = fr; 
+            }   // reflection better
         }
         else if (fr > fv[1]) {
             // 6. Reflection better than second-worst: accept it.
-            v[2] = r; fv[2] = fr;
+            v[2] = r; 
+            fv[2] = fr;
         }
         else {
             // 7. Reflection didn't help enough -> contract.
             if (fr > fv[2]) {
                 // Outside contraction: between centroid and reflection.
-                std::array<double, 2> cc = { c[0] + rho*(r[0]-c[0]),
-                                             c[1] + rho*(r[1]-c[1]) };
+                array<double, 2> cc = { c[0] + rho*(r[0]-c[0]),
+                                        c[1] + rho*(r[1]-c[1]) };
                 double fcc = eval(cc);
-                if (fcc >= fr) { v[2] = cc; fv[2] = fcc; }
-                else           goto shrink;
-            } else {
+                if (fcc >= fr) { 
+                    v[2] = cc; 
+                    fv[2] = fcc; 
+                }
+                else{
+                    goto shrink;
+                }
+            } 
+            else{
                 // Inside contraction: between centroid and worst.
-                std::array<double, 2> cc = { c[0] + rho*(v[2][0]-c[0]),
-                                             c[1] + rho*(v[2][1]-c[1]) };
+                array<double, 2> cc = { c[0] + rho*(v[2][0]-c[0]),
+                                        c[1] + rho*(v[2][1]-c[1]) };
                 double fcc = eval(cc);
-                if (fcc > fv[2]) { v[2] = cc; fv[2] = fcc; }
-                else            goto shrink;
+                if (fcc > fv[2]) { 
+                    v[2] = cc; 
+                    fv[2] = fcc; 
+                }
+                else{
+                    goto shrink;
+                }
             }
             continue;
 
             shrink:
             // 8. Shrink: pull the two worse vertices halfway to the best.
-            for (int i = 1; i < 3; ++i) {
+            for (int i = 1; i < 3; ++i){
                 v[i][0] = v[0][0] + sigma*(v[i][0]-v[0][0]);
                 v[i][1] = v[0][1] + sigma*(v[i][1]-v[0][1]);
                 fv[i] = eval(v[i]);
@@ -232,7 +305,11 @@ double nelder_mead_2d(const std::function<double(double,double)>& f,
 
     // Best (highest) vertex.
     int best = 0;
-    for (int i = 1; i < 3; ++i) if (fv[i] > fv[best]) best = i;
+    for (int i = 1; i < 3; ++i){
+        if (fv[i] > fv[best]){
+            best = i;
+        }
+    }
     outx = v[best][0];
     outy = v[best][1];
     return fv[best];
