@@ -243,7 +243,8 @@ namespace optimML{
                     double p = 0.0;
                     for (int k = 0; k < nmixcomp; ++k){
                         p += mixcompfracs_sparse[i][k] * x_t[n_param-nmixcomp+k];
-                        mixcompsum_f += mixcompfracs_sparse[i][k] / (exp(-x[k]) + 1);
+                        mixcompsum_f += mixcompfracs_sparse[i][k] /
+                            (exp(-x[n_param-nmixcomp+k]) + 1);
                     }
                     x_t_extern[x_t_extern.size()-1] = p;
                 }
