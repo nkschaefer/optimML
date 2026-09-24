@@ -316,12 +316,17 @@ namespace optimML{
         opt.ftol = delta_thresh;
         opt.maxiter = maxiter;
         std::vector<double> xcopy = x;
-        double res = opt.run(xcopy);
-        for (int i = 0; i < n_param; ++i){
-            x[i] = xcopy[i];
+        bool res = opt.run(xcopy);
+        if (res){
+            for (int i = 0; i < n_param; ++i){
+                x[i] = xcopy[i];
+            }
         }
         double ll = eval_ll_all();
         fill_results(ll);
+        if (!res){
+            return false;
+        }
         // Fill SE values
         
         vector<double> basisv(n_param-nmixcomp, 0);
