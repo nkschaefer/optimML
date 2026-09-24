@@ -2419,7 +2419,8 @@ part of a param grp.\n");
                 double p = 0.0;
                 for (int k = 0; k < nmixcomp; ++k){
                     p += mixcompfracs_sparse[jid][k] * x_t[n_param-nmixcomp+k];
-                    mixcompsum_f += mixcompfracs_sparse[jid][k] / (exp(-x[k]) + 1);
+                    mixcompsum_f += mixcompfracs_sparse[jid][k] /
+                        (exp(-x[n_param-nmixcomp+k]) + 1);
                 }
                 x_t_extern_thread[thread_idx][x_t_extern.size()-1] = p;
                 mixcompsum_f_thread[thread_idx] = mixcompsum_f;

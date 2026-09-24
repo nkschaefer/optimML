@@ -243,7 +243,8 @@ namespace optimML{
                     double p = 0.0;
                     for (int k = 0; k < nmixcomp; ++k){
                         p += mixcompfracs_sparse[i][k] * x_t[n_param-nmixcomp+k];
-                        mixcompsum_f += mixcompfracs_sparse[i][k] / (exp(-x[k]) + 1);
+                        mixcompsum_f += mixcompfracs_sparse[i][k] /
+                            (exp(-x[n_param-nmixcomp+k]) + 1);
                     }
                     x_t_extern[x_t_extern.size()-1] = p;
                 }
@@ -315,12 +316,17 @@ namespace optimML{
         opt.ftol = delta_thresh;
         opt.maxiter = maxiter;
         std::vector<double> xcopy = x;
-        double res = opt.run(xcopy);
-        for (int i = 0; i < n_param; ++i){
-            x[i] = xcopy[i];
+        bool res = opt.run(xcopy);
+        if (res){
+            for (int i = 0; i < n_param; ++i){
+                x[i] = xcopy[i];
+            }
         }
         double ll = eval_ll_all();
         fill_results(ll);
+        if (!res){
+            return false;
+        }
         // Fill SE values
         
         vector<double> basisv(n_param-nmixcomp, 0);
